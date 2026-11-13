@@ -1,0 +1,23 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.pgdata/
+
+# Local runtime records, uploads, credentials and encryption keys
+data/
+storage/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Temporary audit output and editor/OS files
+.audit-tmp/
+.vscode/
+Thumbs.db
+*.tsbuildinfo

@@ -1,0 +1,976 @@
+// Prisma Schema for Workspace Pro (Pure PostgreSQL + Prisma ORM)
+// Single Schema Authority across all workspace engines & Administrator identity.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ADMINISTRATOR, WORKSPACE USERS, SESSIONS, PERMISSIONS & AUDIT
+// ============================================================================
+
+model WorkspaceUser {
+  id                String                   @id
+  username          String                   @unique
+  email             String                   @unique
+  name              String                   @default("Administrator")
+  firstName         String?                  @map("first_name")
+  lastName          String?                  @map("last_name")
+  role              String                   @default("MEMBER") // OWNER | ADMIN | MEMBER
+  passwordHash      String?                  @map("password_hash")
+  passwordSet       Boolean                  @default(false) @map("password_set")
+  avatarUrl         String?                  @map("avatar_url")
+  phoneCountryCode  String?                  @map("phone_country_code")
+  phoneNumber       String?                  @map("phone_number")
+  countryCode       String?                  @map("country_code")
+  countryName       String?                  @map("country_name")
+  stateCode         String?                  @map("state_code")
+  stateName         String?                  @map("state_name")
+  cityName          String?                  @map("city_name")
+  addressLine       String?                  @map("address_line")
+  zipCode           String?                  @map("zip_code")
+  memberTheme       String                   @default("cloud") @map("member_theme") // cloud | mint | lavender
+  memberId          String?                  @unique @map("member_id")
+  permissionVersion Int                      @default(1) @map("permission_version")
+  storageQuotaBytes BigInt                   @default(104857600) @map("storage_quota_bytes") // 100 MB default
+  maxFileSizeBytes  BigInt                   @default(15728640) @map("max_file_size_bytes") // 15 MB default
+  isActive          Boolean                  @default(true) @map("is_active")
+  lastLoginAt       String?                  @map("last_login_at")
+  createdAt         String                   @map("created_at")
+  updatedAt         String                   @map("updated_at")
+  timestampMs       BigInt                   @map("timestamp_ms")
+  extraFields       Json                     @default("{}") @map("extra_fields")
+  sessions          WorkspaceSession[]
+  accessPolicy      MemberAccessPolicy?
+  projectGrants     ProjectPermissionGrant[]
+  taskAssignments   TaskAssignment[]
+  channelMembers    ChannelMembership[]
+
+  @@map("workspace_users")
+}
+
+model WorkspaceSession {
+  id         String        @id
+  userId     String        @map("user_id")
+  tokenHash  String        @unique @map("token_hash")
+  userAgent  String?       @map("user_agent")
+  ipAddress  String?       @map("ip_address")
+  expiresAt  BigInt        @map("expires_at")
+  lastSeenAt BigInt        @map("last_seen_at")
+  createdAt  String        @map("created_at")
+  revokedAt  String?       @map("revoked_at")
+  user       WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("workspace_sessions")
+}
+
+model WorkspaceInvitation {
+  id             String  @id
+  tokenHash      String  @unique @map("token_hash")
+  email          String
+  name           String
+  firstName      String? @map("first_name")
+  lastName       String? @map("last_name")
+  targetRole     String  @default("MEMBER") @map("target_role")
+  presetKey      String  @default("standard_member") @map("preset_key")
+  memberId       String? @map("member_id")
+  invitedById    String  @map("invited_by_id")
+  invitedByName  String? @map("invited_by_name")
+  invitedByEmail String? @map("invited_by_email")
+  emailSent      Boolean @default(false) @map("email_sent")
+  expiresAt      BigInt  @map("expires_at")
+  acceptedAt     String? @map("accepted_at")
+  revokedAt      String? @map("revoked_at")
+  createdAt      String  @map("created_at")
+
+  @@index([email])
+  @@map("workspace_invitations")
+}
+
+model MemberAccessPolicy {
+  id                    String        @id
+  userId                String        @unique @map("user_id")
+  presetKey             String        @default("standard_member") @map("preset_key")
+  allowedModulesJson    Json          @default("[]") @map("allowed_modules_json")
+  restrictedModulesJson Json          @default("[]") @map("restricted_modules_json")
+  allowedActionsJson    Json          @default("[]") @map("allowed_actions_json")
+  deniedActionsJson     Json          @default("[]") @map("denied_actions_json")
+  updatedById           String?       @map("updated_by_id")
+  updatedAt             String        @map("updated_at")
+  user                  WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("member_access_policies")
+}
+
+model ProjectPermissionGrant {
+  id          String        @id
+  projectId   String        @map("project_id")
+  userId      String        @map("user_id")
+  projectRole String        @default("PARTICIPANT") @map("project_role") // PARTICIPANT | MANAGER
+  actionsJson Json          @default("[]") @map("actions_json")
+  grantedById String        @map("granted_by_id")
+  expiresAt   String?       @map("expires_at")
+  createdAt   String        @map("created_at")
+  updatedAt   String        @map("updated_at")
+  project     CmhProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_permission_grants")
+}
+
+model TaskAssignment {
+  id                String        @id
+  taskId            String        @map("task_id")
+  userId            String        @map("user_id")
+  canUpdateProgress Boolean       @default(true) @map("can_update_progress")
+  createdAt         String        @map("created_at")
+  task              CmhTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user              WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@map("task_assignments")
+}
+
+model ChannelMembership {
+  id          String               @id
+  channelId   String               @map("channel_id")
+  userId      String               @map("user_id")
+  channelRole String               @default("MEMBER") @map("channel_role") // MEMBER | MODERATOR
+  createdAt   String               @map("created_at")
+  channel     WorkspaceChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user        WorkspaceUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_memberships")
+}
+
+model ResourceShare {
+  id           String @id
+  resourceType String @map("resource_type") // DOC | FORM | SLIDE | FILE
+  resourceId   String @map("resource_id")
+  targetUserId String @map("target_user_id")
+  accessLevel  String @default("VIEW") @map("access_level") // VIEW | EDIT
+  sharedById   String @map("shared_by_id")
+  createdAt    String @map("created_at")
+
+  @@unique([resourceType, resourceId, targetUserId])
+  @@index([targetUserId, resourceType])
+  @@map("resource_shares")
+}
+
+model AuditEvent {
+  id          String  @id
+  actorUserId String? @map("actor_user_id")
+  actorEmail  String  @map("actor_email")
+  action      String
+  targetType  String? @map("target_type")
+  targetId    String? @map("target_id")
+  summary     String
+  detailsJson Json    @default("{}") @map("details_json")
+  timestampMs BigInt  @map("timestamp_ms")
+  createdAt   String  @map("created_at")
+
+  @@index([timestampMs])
+  @@map("audit_events")
+}
+
+// ============================================================================
+// SYSTEM SETTINGS & INTEGRATIONS
+// ============================================================================
+
+model WorkspaceSystemSetting {
+  id                         String  @id @default("default")
+  workspaceName              String  @default("Workspace Pro") @map("workspace_name")
+  organizationName           String  @default("") @map("organization_name")
+  adminEmail                 String  @default("zayed.islam1998@gmail.com") @map("admin_email")
+  timezone                   String  @default("Asia/Dhaka")
+  dateFormat                 String  @default("MMM DD, YYYY") @map("date_format")
+  defaultLandingModule       String  @default("gmail") @map("default_landing_module")
+  autoSyncIntervalSec        Int     @default(15) @map("auto_sync_interval_sec")
+  densityMode                String  @default("comfortable") @map("density_mode")
+  defaultSignatureHtml       String  @default("") @map("default_signature_html")
+  defaultReplyTo             String  @default("") @map("default_reply_to")
+  bulkDelayMs                Int     @default(400) @map("bulk_delay_ms")
+  dailySendLimit             Int     @default(500) @map("daily_send_limit")
+  enableReadReceipts         Boolean @default(false) @map("enable_read_receipts")
+  autoSaveAttachmentsToFiles Boolean @default(true) @map("auto_save_attachments_to_files")
+  enablePublicForms          Boolean @default(true) @map("enable_public_forms")
+  enablePublicCmhPortal      Boolean @default(true) @map("enable_public_cmh_portal")
+  incomingWebhookSecret      String  @default("") @map("incoming_webhook_secret")
+  outgoingWebhookUrl         String  @default("") @map("outgoing_webhook_url")
+  externalIntegrationsJson   Json    @default("[]") @map("external_integrations_json")
+  postgresConfigJson         Json    @default("{}") @map("postgres_config_json")
+  updatedAt                  String  @map("updated_at")
+
+  @@map("workspace_system_settings")
+}
+
+// ============================================================================
+// MAIL ACCOUNTS, MESSAGES, CUSTOM TABS & BULK CAMPAIGNS
+// ============================================================================
+
+model ServerMailAccount {
+  id                String   @id
+  label             String
+  email             String
+  username          String
+  imapHost          String   @map("imap_host")
+  imapPort          Int      @default(993) @map("imap_port")
+  imapSecure        Boolean  @default(true) @map("imap_secure")
+  smtpHost          String   @map("smtp_host")
+  smtpPort          Int      @default(465) @map("smtp_port")
+  smtpSecure        Boolean  @default(true) @map("smtp_secure")
+  passwordHash      String   @map("password_hash")
+  encryptedPassword String   @map("encrypted_password")
+  createdAt         String   @map("created_at")
+  lastVerifiedAt    String?  @map("last_verified_at")
+  extraFields       Json     @default("{}") @map("extra_fields")
+
+  @@map("server_mail_accounts")
+}
+
+model GmailAccount {
+  id                String   @id
+  label             String
+  email             String
+  username          String   @default("")
+  authMode          String   @default("app_password") @map("auth_mode")
+  imapHost          String   @default("imap.gmail.com") @map("imap_host")
+  imapPort          Int      @default(993) @map("imap_port")
+  imapSecure        Boolean  @default(true) @map("imap_secure")
+  smtpHost          String   @default("smtp.gmail.com") @map("smtp_host")
+  smtpPort          Int      @default(465) @map("smtp_port")
+  smtpSecure        Boolean  @default(true) @map("smtp_secure")
+  clientId          String?  @map("client_id")
+  clientSecretEnc   String?  @map("client_secret_enc")
+  refreshTokenEnc   String?  @map("refresh_token_enc")
+  passwordHash      String   @map("password_hash")
+  encryptedPassword String   @map("encrypted_password")
+  createdAt         String   @map("created_at")
+  lastVerifiedAt    String?  @map("last_verified_at")
+  extraFields       Json     @default("{}") @map("extra_fields")
+
+  @@map("gmail_accounts")
+}
+
+model MailMessage {
+  id          String  @id
+  accountId   String  @map("account_id")
+  threadId    String  @map("thread_id")
+  folder      String  @default("inbox")
+  subject     String
+  fromName    String  @map("from_name")
+  fromEmail   String  @map("from_email")
+  toEmail     String  @map("to_email")
+  cc          String?
+  dateStr     String  @map("date_str")
+  timestampMs BigInt  @map("timestamp_ms")
+  snippet     String?
+  bodyHtml    String? @map("body_html")
+  bodyText    String? @map("body_text")
+  isUnread    Boolean @default(true) @map("is_unread")
+  isStarred   Boolean @default(false) @map("is_starred")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@index([accountId, folder, timestampMs])
+  @@map("mail_messages")
+}
+
+model MailStarredMessage {
+  id        String @id
+  accountId String @map("account_id")
+  messageId String @map("message_id")
+
+  @@unique([accountId, messageId])
+  @@map("mail_starred_messages")
+}
+
+model CustomMailTab {
+  id             String  @id
+  name           String
+  query          String
+  accentColor    String  @default("#0B57D0") @map("accent_color")
+  description    String?
+  isBulkShortcut Boolean @default(false) @map("is_bulk_shortcut")
+  createdAt      String  @map("created_at")
+  timestampMs    BigInt  @default(0) @map("timestamp_ms")
+
+  @@map("custom_mail_tabs")
+}
+
+model BulkCampaign {
+  id             String @id
+  name           String
+  subject        String
+  bodyHtml       String @map("body_html")
+  status         String @default("Draft")
+  sentCount      Int    @default(0) @map("sent_count")
+  totalCount     Int    @default(0) @map("total_count")
+  updatedAt      String @map("updated_at")
+  recipientsJson Json   @default("[]") @map("recipients_json")
+  timestampMs    BigInt @default(0) @map("timestamp_ms")
+  extraFields    Json   @default("{}") @map("extra_fields")
+
+  @@map("bulk_campaigns")
+}
+
+// ============================================================================
+// DOCS, SLIDES, FORMS, MEETINGS, TEAMS, POSTS, FILES & NOTIFICATIONS
+// ============================================================================
+
+model WorkspaceDoc {
+  id           String  @id
+  title        String
+  category     String  @default("General")
+  bodyText     String  @default("") @map("body_text")
+  googleDocId  String? @map("google_doc_id")
+  googleDocUrl String? @map("google_doc_url")
+  linkedFileId String? @map("linked_file_id")
+  fileUrl      String? @map("file_url")
+  wordCount    Int     @default(0) @map("word_count")
+  ownerUserId  String? @default("user-admin-primary") @map("owner_user_id")
+  visibility   String  @default("PRIVATE")
+  createdAt    String  @map("created_at")
+  updatedAt    String  @map("updated_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_docs")
+}
+
+model WorkspaceSlide {
+  id           String  @id
+  title        String
+  subtitle     String?
+  category     String  @default("Presentations")
+  themeColor   String  @default("#D97706") @map("theme_color")
+  authorName   String  @default("Administrator") @map("author_name")
+  pagesJson    Json    @default("[]") @map("pages_json")
+  linkedFileId String? @map("linked_file_id")
+  fileUrl      String? @map("file_url")
+  slideCount   Int     @default(1) @map("slide_count")
+  ownerUserId  String? @default("user-admin-primary") @map("owner_user_id")
+  visibility   String  @default("PRIVATE")
+  createdAt    String  @map("created_at")
+  updatedAt    String  @map("updated_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_slides")
+}
+
+model WorkspaceForm {
+  id                  String           @id
+  title               String
+  description         String?
+  accentColor         String           @default("#673AB7") @map("accent_color")
+  isPublic            Boolean          @default(true) @map("is_public")
+  identityMode        String           @default("OPTIONAL") @map("identity_mode")
+  targetSubmissions   Int              @default(50) @map("target_submissions")
+  autoCloseOnTarget   Boolean          @default(false) @map("auto_close_on_target")
+  confirmationMessage String?          @map("confirmation_message")
+  googleFormUri       String?          @map("google_form_uri")
+  fieldsJson          Json             @default("[]") @map("fields_json")
+  ownerUserId         String?          @default("user-admin-primary") @map("owner_user_id")
+  createdAt           String           @map("created_at")
+  timestampMs         BigInt           @default(0) @map("timestamp_ms")
+  extraFields         Json             @default("{}") @map("extra_fields")
+  submissions         FormSubmission[]
+
+  @@map("workspace_forms")
+}
+
+model FormSubmission {
+  id              String        @id
+  formId          String        @map("form_id")
+  respondentName  String        @map("respondent_name")
+  respondentEmail String        @map("respondent_email")
+  submittedAt     String        @map("submitted_at")
+  timestampMs     BigInt        @map("timestamp_ms")
+  answersJson     Json          @default("{}") @map("answers_json")
+  extraFields     Json          @default("{}") @map("extra_fields")
+  form            WorkspaceForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, timestampMs])
+  @@map("form_submissions")
+}
+
+model WorkspaceMeeting {
+  id           String  @id
+  title        String
+  agenda       String?
+  meetingCode  String  @map("meeting_code")
+  meetingUri   String  @map("meeting_uri")
+  scheduledFor String  @map("scheduled_for")
+  durationMins Int     @default(30) @map("duration_mins")
+  hostEmail    String? @map("host_email")
+  status       String  @default("Active")
+  createdAt    String  @map("created_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_meetings")
+}
+
+model WorkspaceTeamGroup {
+  id          String  @id
+  name        String
+  description String?
+  color       String  @default("#0B57D0")
+  createdAt   String  @map("created_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_team_groups")
+}
+
+model WorkspaceMember {
+  id           String  @id
+  firstName    String  @map("first_name")
+  lastName     String  @map("last_name")
+  fullName     String  @map("full_name")
+  email        String
+  designation  String
+  teamId       String? @map("team_id")
+  teamName     String? @map("team_name")
+  phone        String?
+  bio          String?
+  avatarUrl    String? @map("avatar_url")
+  status       String  @default("Active")
+  inviteToken  String  @map("invite_token")
+  inviteSentAt String? @map("invite_sent_at")
+  joinedAt     String  @map("joined_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_members")
+}
+
+model WorkspacePostCategory {
+  id          String  @id
+  name        String
+  slug        String
+  color       String  @default("#0B57D0")
+  description String?
+  createdAt   String  @map("created_at")
+
+  @@map("workspace_post_categories")
+}
+
+model WorkspacePostNotice {
+  id              String  @id
+  type            String  @default("POST")
+  title           String
+  summary         String?
+  content         String
+  categoryId      String? @map("category_id")
+  categoryName    String  @default("General") @map("category_name")
+  authorName      String  @default("Administrator") @map("author_name")
+  authorRole      String? @map("author_role")
+  ownerUserId     String? @default("user-admin-primary") @map("owner_user_id")
+  status          String  @default("PUBLISHED") // PUBLISHED | DRAFT
+  coverImageUrl   String? @map("cover_image_url")
+  attachmentsJson Json    @default("[]") @map("attachments_json")
+  isPinned        Boolean @default(false) @map("is_pinned")
+  pinnedUntil     String? @map("pinned_until")
+  priority        String  @default("Normal")
+  viewsCount      Int     @default(0) @map("views_count")
+  createdAt       String  @map("created_at")
+  updatedAt       String  @map("updated_at")
+  timestampMs     BigInt  @map("timestamp_ms")
+  extraFields     Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_posts_notices")
+}
+
+model WorkspaceFolder {
+  id             String  @id
+  name           String
+  folderType     String  @default("FOLDER") @map("folder_type")
+  parentFolderId String? @map("parent_folder_id")
+  description    String?
+  color          String  @default("#0B57D0")
+  ownerUserId    String? @default("user-admin-primary") @map("owner_user_id")
+  createdAt      String  @map("created_at")
+  timestampMs    BigInt  @map("timestamp_ms")
+
+  @@index([parentFolderId])
+  @@map("workspace_folders")
+}
+
+model WorkspaceFile {
+  id                  String  @id
+  folderId            String  @default("folder-general") @map("folder_id")
+  folderName          String  @default("General Server Files") @map("folder_name")
+  name                String
+  originalName        String  @map("original_name")
+  mimeType            String  @map("mime_type")
+  extension           String
+  isImage             Boolean @default(false) @map("is_image")
+  width               Int?
+  height              Int?
+  originalSizeBytes   BigInt  @default(0) @map("original_size_bytes")
+  compressedSizeBytes BigInt  @default(0) @map("compressed_size_bytes")
+  compressionRatio    Int     @default(0) @map("compression_ratio")
+  url                 String
+  storagePath         String  @map("storage_path")
+  thumbnailUrl        String? @map("thumbnail_url")
+  slideDeckId         String? @map("slide_deck_id")
+  docId               String? @map("doc_id")
+  bodyText            String? @map("body_text")
+  ownerUserId         String? @default("user-admin-primary") @map("owner_user_id")
+  visibility          String  @default("PRIVATE")
+  versionCount        Int     @default(1) @map("version_count")
+  deletedAt           String? @map("deleted_at")
+  deletedTimestampMs  BigInt? @map("deleted_timestamp_ms")
+  uploadedAt          String  @map("uploaded_at")
+  timestampMs         BigInt  @map("timestamp_ms")
+  extraFields         Json    @default("{}") @map("extra_fields")
+
+  @@index([folderId, deletedAt, timestampMs])
+  @@map("workspace_files")
+}
+
+model WorkspaceFileVersion {
+  id             String @id
+  fileId         String @map("file_id")
+  versionNumber  Int    @map("version_number")
+  storagePath    String @map("storage_path")
+  url            String
+  mimeType       String @map("mime_type")
+  sizeBytes      BigInt @default(0) @map("size_bytes")
+  note           String @default("Saved revision")
+  createdByEmail String @default("system") @map("created_by_email")
+  createdAt      String @map("created_at")
+  timestampMs    BigInt @map("timestamp_ms")
+
+  @@index([fileId, versionNumber])
+  @@map("workspace_file_versions")
+}
+
+model SystemNotification {
+  id          String  @id
+  type        String
+  title       String
+  description String?
+  module      String
+  targetId    String? @map("target_id")
+  accountId   String? @map("account_id")
+  timestampMs BigInt  @map("timestamp_ms")
+  timeLabel   String  @map("time_label")
+  isRead      Boolean @default(false) @map("is_read")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@index([timestampMs])
+  @@map("system_notifications")
+}
+
+// ============================================================================
+// CMH APP SUITE (FORM BUILDER, TASKS, PROJECTS & NOTIFICATION RULES)
+// ============================================================================
+
+model CmhFormTemplate {
+  id                   String  @id
+  title                String
+  description          String?
+  formCategory         String  @default("GENERAL") @map("form_category")
+  accessMode           String  @default("PUBLIC") @map("access_mode")
+  invitedMemberIdsJson Json    @default("[]") @map("invited_member_ids_json")
+  invitedTeamIdsJson   Json    @default("[]") @map("invited_team_ids_json")
+  submitButtonLabel    String  @default("Submit") @map("submit_button_label")
+  confirmationMessage  String? @map("confirmation_message")
+  fieldsJson           Json    @default("[]") @map("fields_json")
+  submissionsJson      Json    @default("[]") @map("submissions_json")
+  createdAt            String  @map("created_at")
+  updatedAt            String  @map("updated_at")
+  timestampMs          BigInt  @map("timestamp_ms")
+  extraFields          Json    @default("{}") @map("extra_fields")
+
+  @@map("cmh_form_templates")
+}
+
+model CmhTask {
+  id                    String           @id
+  title                 String
+  description           String?
+  formTemplateId        String           @map("form_template_id")
+  formTemplateTitle     String           @map("form_template_title")
+  status                String           @default("To Do")
+  priority              String           @default("Medium")
+  dueDate               String?          @map("due_date")
+  accessMode            String           @default("PUBLIC") @map("access_mode")
+  projectId             String?          @map("project_id")
+  ownerUserId           String?          @default("user-admin-primary") @map("owner_user_id")
+  assignedMemberIdsJson Json             @default("[]") @map("assigned_member_ids_json")
+  assignedTeamIdsJson   Json             @default("[]") @map("assigned_team_ids_json")
+  customFieldValuesJson Json             @default("{}") @map("custom_field_values_json")
+  submissionsJson       Json             @default("[]") @map("submissions_json")
+  createdAt             String           @map("created_at")
+  updatedAt             String           @map("updated_at")
+  timestampMs           BigInt           @map("timestamp_ms")
+  extraFields           Json             @default("{}") @map("extra_fields")
+  assignments           TaskAssignment[]
+
+  @@map("cmh_tasks")
+}
+
+model CmhProject {
+  id                    String                   @id
+  title                 String
+  description           String?
+  formTemplateId        String                   @map("form_template_id")
+  formTemplateTitle     String                   @map("form_template_title")
+  status                String                   @default("Active")
+  priority              String                   @default("High")
+  deadline              String?
+  budget                String?
+  accessMode            String                   @default("PUBLIC") @map("access_mode")
+  ownerUserId           String?                  @default("user-admin-primary") @map("owner_user_id")
+  assignedMemberIdsJson Json                     @default("[]") @map("assigned_member_ids_json")
+  assignedTeamIdsJson   Json                     @default("[]") @map("assigned_team_ids_json")
+  customFieldValuesJson Json                     @default("{}") @map("custom_field_values_json")
+  submissionsJson       Json                     @default("[]") @map("submissions_json")
+  createdAt             String                   @map("created_at")
+  updatedAt             String                   @map("updated_at")
+  timestampMs           BigInt                   @map("timestamp_ms")
+  extraFields           Json                     @default("{}") @map("extra_fields")
+  permissionGrants      ProjectPermissionGrant[]
+
+  @@map("cmh_projects")
+}
+
+model CmhNotificationRule {
+  id                      String  @id
+  adminEmail              String  @default("zayed.islam1998@gmail.com") @map("admin_email")
+  notifyOnFormSubmit      Boolean @default(true) @map("notify_on_form_submit")
+  notifyOnTaskActivity    Boolean @default(true) @map("notify_on_task_activity")
+  notifyOnProjectActivity Boolean @default(true) @map("notify_on_project_activity")
+  notifyOnMemberActivity  Boolean @default(true) @map("notify_on_member_activity")
+  autoSendAdminEmail      Boolean @default(true) @map("auto_send_admin_email")
+  injectIntoPrimaryInbox  Boolean @default(true) @map("inject_into_primary_inbox")
+  updatedAt               String  @map("updated_at")
+
+  @@map("cmh_notification_rules")
+}
+
+// ============================================================================
+// WORKSPACE ENGINES (SHEETS, CALENDAR, FINANCE, CRM, HR, CHAT, WIKI, AUTOMATION)
+// ============================================================================
+
+model WorkspaceSheet {
+  id          String  @id
+  title       String
+  category    String  @default("General")
+  columnsJson Json    @default("[]") @map("columns_json")
+  rowsJson    Json    @default("[]") @map("rows_json")
+  createdAt   String  @map("created_at")
+  updatedAt   String  @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_sheets")
+}
+
+model WorkspaceCalendarEvent {
+  id          String  @id
+  title       String
+  description String?
+  eventType   String  @default("EVENT") @map("event_type")
+  date        String
+  startTime   String? @map("start_time")
+  endTime     String? @map("end_time")
+  location    String?
+  color       String  @default("#0B57D0")
+  createdAt   String  @map("created_at")
+  updatedAt   String? @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_calendar_events")
+}
+
+model WorkspaceInvoice {
+  id            String  @id
+  invoiceNumber String  @map("invoice_number")
+  docType       String  @default("INVOICE") @map("doc_type")
+  clientName    String  @map("client_name")
+  clientEmail   String  @map("client_email")
+  projectTitle  String? @map("project_title")
+  issueDate     String  @map("issue_date")
+  dueDate       String  @map("due_date")
+  currency      String  @default("USD")
+  itemsJson     Json    @default("[]") @map("items_json")
+  taxPercent    Float   @default(0) @map("tax_percent")
+  discountAmt   Float   @default(0) @map("discount_amt")
+  totalAmount   Float   @default(0) @map("total_amount")
+  status        String  @default("Unpaid")
+  notes         String?
+  createdAt     String  @map("created_at")
+  updatedAt     String? @map("updated_at")
+  timestampMs   BigInt  @map("timestamp_ms")
+  extraFields   Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_invoices")
+}
+
+model WorkspaceExpense {
+  id           String  @id
+  title        String
+  category     String  @default("Operations")
+  amount       Float   @default(0)
+  currency     String  @default("USD")
+  date         String
+  vendor       String?
+  projectTitle String? @map("project_title")
+  status       String  @default("Approved")
+  createdAt    String  @map("created_at")
+  updatedAt    String? @map("updated_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_expenses")
+}
+
+model WorkspaceCrmLead {
+  id          String  @id
+  name        String
+  company     String
+  email       String
+  phone       String?
+  stage       String  @default("New Lead")
+  dealValue   Float   @default(0) @map("deal_value")
+  assignedTo  String? @map("assigned_to")
+  notes       String?
+  createdAt   String  @map("created_at")
+  updatedAt   String? @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_crm_leads")
+}
+
+model WorkspaceSupportTicket {
+  id            String  @id
+  ticketNumber  String  @map("ticket_number")
+  subject       String
+  customerName  String  @map("customer_name")
+  customerEmail String  @map("customer_email")
+  priority      String  @default("Medium")
+  status        String  @default("Open")
+  assignedTo    String? @map("assigned_to")
+  description   String
+  resolution    String?
+  createdAt     String  @map("created_at")
+  updatedAt     String? @map("updated_at")
+  timestampMs   BigInt  @map("timestamp_ms")
+  extraFields   Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_support_tickets")
+}
+
+model WorkspaceHrRecord {
+  id          String  @id
+  recordType  String  @map("record_type") // ATTENDANCE | LEAVE | PAYSLIP
+  memberName  String  @map("member_name")
+  memberEmail String  @map("member_email")
+  dateOrMonth String  @map("date_or_month")
+  status      String
+  detailsJson Json    @default("{}") @map("details_json")
+  createdAt   String  @map("created_at")
+  updatedAt   String? @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_hr_records")
+}
+
+model WorkspaceChatChannel {
+  id              String              @id
+  name            String
+  description     String?
+  channelType     String              @default("PUBLIC") @map("channel_type")
+  ownerUserId     String?             @default("user-admin-primary") @map("owner_user_id")
+  isWorkspaceWide Boolean             @default(false) @map("is_workspace_wide")
+  createdAt       String              @map("created_at")
+  updatedAt       String?             @map("updated_at")
+  timestampMs     BigInt              @map("timestamp_ms")
+  extraFields     Json                @default("{}") @map("extra_fields")
+  members         ChannelMembership[]
+
+  @@map("workspace_chat_channels")
+}
+
+model WorkspaceChatMessage {
+  id          String  @id
+  channelId   String  @map("channel_id")
+  senderName  String  @map("sender_name")
+  senderEmail String  @map("sender_email")
+  text        String
+  isPinned    Boolean @default(false) @map("is_pinned")
+  createdAt   String  @map("created_at")
+  updatedAt   String? @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@index([channelId, timestampMs])
+  @@map("workspace_chat_messages")
+}
+
+model WorkspaceWikiArticle {
+  id          String  @id
+  title       String
+  category    String  @default("SOP & Guidelines")
+  summary     String?
+  content     String
+  authorName  String  @default("Administrator") @map("author_name")
+  isPinned    Boolean @default(false) @map("is_pinned")
+  createdAt   String  @map("created_at")
+  updatedAt   String  @map("updated_at")
+  timestampMs BigInt  @map("timestamp_ms")
+  extraFields Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_wiki_articles")
+}
+
+model WorkspaceAutomationRule {
+  id           String  @id
+  name         String
+  triggerEvent String  @map("trigger_event")
+  actionType   String  @map("action_type")
+  targetValue  String  @map("target_value")
+  isActive     Boolean @default(true) @map("is_active")
+  runsCount    Int     @default(0) @map("runs_count")
+  lastRunAt    String? @map("last_run_at")
+  createdAt    String  @map("created_at")
+  updatedAt    String? @map("updated_at")
+  timestampMs  BigInt  @map("timestamp_ms")
+  extraFields  Json    @default("{}") @map("extra_fields")
+
+  @@map("workspace_automation_rules")
+}
+
+
+model CommunicationConversation {
+  id                     String                 @id
+  conversationKey        String                 @unique @map("conversation_key")
+  participant1Id         String                 @map("participant1_id")
+  participant1Name       String                 @map("participant1_name")
+  participant1Role       String                 @map("participant1_role")
+  participant1AvatarUrl  String?                @map("participant1_avatar_url")
+  participant2Id         String                 @map("participant2_id")
+  participant2Name       String                 @map("participant2_name")
+  participant2Role       String                 @map("participant2_role")
+  participant2AvatarUrl  String?                @map("participant2_avatar_url")
+  lastMessageText        String                 @default("") @map("last_message_text")
+  lastMessageTimestampMs BigInt                 @default(0) @map("last_message_timestamp_ms")
+  unreadCountP1          Int                    @default(0) @map("unread_count_p1")
+  unreadCountP2          Int                    @default(0) @map("unread_count_p2")
+  isPinned               Boolean                @default(false) @map("is_pinned")
+  createdAt              String                 @map("created_at")
+  updatedAt              String                 @map("updated_at")
+  timestampMs            BigInt                 @map("timestamp_ms")
+  extraFields            Json                   @default("{}") @map("extra_fields")
+  messages               CommunicationMessage[]
+
+  @@index([participant1Id, lastMessageTimestampMs])
+  @@index([participant2Id, lastMessageTimestampMs])
+  @@map("communication_conversations")
+}
+
+model CommunicationMessage {
+  id              String                    @id
+  conversationId  String                    @map("conversation_id")
+  senderId        String                    @map("sender_id")
+  senderName      String                    @map("sender_name")
+  senderRole      String                    @map("sender_role")
+  senderAvatarUrl String?                   @map("sender_avatar_url")
+  recipientId     String                    @map("recipient_id")
+  text            String
+  attachments     Json                      @default("[]") @map("attachments")
+  status          String                    @default("SENT") @map("status")
+  isRead          Boolean                   @default(false) @map("is_read")
+  readAt          String?                   @map("read_at")
+  replyToId       String?                   @map("reply_to_id")
+  replySnippet    String?                   @map("reply_snippet")
+  reactions       Json                      @default("{}") @map("reactions")
+  isPinned        Boolean                   @default(false) @map("is_pinned")
+  createdAt       String                    @map("created_at")
+  timestampMs     BigInt                    @map("timestamp_ms")
+  extraFields     Json                      @default("{}") @map("extra_fields")
+  conversation    CommunicationConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, timestampMs])
+  @@index([recipientId, isRead])
+  @@map("communication_messages")
+}
+
+// ============================================================================
+// ISOLATED RESUME BUILDER & CORPORATE ORGANIZATION WEBSITE TABLES
+// ============================================================================
+
+model WorkspaceResumeProfile {
+  id                  String  @id
+  ownerKey            String  @unique @map("owner_key")
+  userId              String? @map("user_id")
+  memberId            String? @map("member_id")
+  email               String  @default("")
+  fullName            String  @default("") @map("full_name")
+  professionalTitle   String  @default("") @map("professional_title")
+  executiveSummary    String  @default("") @map("executive_summary")
+  avatarUrl           String? @map("avatar_url")
+  coverImageUrl       String? @map("cover_image_url")
+  verifiedBadge       Boolean @default(true) @map("verified_badge")
+  statusText          String? @map("status_text")
+  contactJson         Json    @default("{}") @map("contact_json")
+  experienceJson      Json    @default("[]") @map("experience_json")
+  educationJson       Json    @default("[]") @map("education_json")
+  skillsJson          Json    @default("[]") @map("skills_json")
+  projectsJson        Json    @default("[]") @map("projects_json")
+  certificationsJson  Json    @default("[]") @map("certifications_json")
+  customSectionsJson  Json    @default("[]") @map("custom_sections_json")
+  settingsJson        Json    @default("{}") @map("settings_json")
+  updatedAt           String  @map("updated_at")
+  timestampMs         BigInt  @map("timestamp_ms")
+
+  @@index([userId])
+  @@index([memberId])
+  @@index([email])
+  @@map("workspace_resume_profiles")
+}
+
+model WorkspaceCorporateWebsite {
+  id                 String  @id
+  ownerKey           String  @unique @map("owner_key")
+  userId             String? @map("user_id")
+  memberId           String? @map("member_id")
+  email              String  @default("")
+  orgName            String  @default("") @map("org_name")
+  tagline            String  @default("")
+  logoUrl            String? @map("logo_url")
+  brandingJson       Json    @default("{}") @map("branding_json")
+  heroSliderJson     Json    @default("[]") @map("hero_slider_json")
+  missionVisionJson  Json    @default("{}") @map("mission_vision_json")
+  servicesJson       Json    @default("[]") @map("services_json")
+  teamJson           Json    @default("[]") @map("team_json")
+  recentUpdatesJson  Json    @default("[]") @map("recent_updates_json")
+  photoGalleryJson   Json    @default("[]") @map("photo_gallery_json")
+  videoGalleryJson   Json    @default("[]") @map("video_gallery_json")
+  testimonialsJson   Json    @default("[]") @map("testimonials_json")
+  contactJson        Json    @default("{}") @map("contact_json")
+  settingsJson       Json    @default("{}") @map("settings_json")
+  updatedAt          String  @map("updated_at")
+  timestampMs        BigInt  @map("timestamp_ms")
+
+  @@index([userId])
+  @@index([memberId])
+  @@index([email])
+  @@map("workspace_corporate_websites")
+}
+

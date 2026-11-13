@@ -1,0 +1,11 @@
+{
+  "name": "Workspace Pro — Gmail, Docs, Forms & Meet",
+  "description": "Standalone unified workspace hub with Gmail, Server Mail, Docs, Slides, Forms, Meet, Teams, CMH Hub, File Manager, and Bulk Mail Studio backed by PostgreSQL & Prisma.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
