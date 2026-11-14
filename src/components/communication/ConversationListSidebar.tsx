@@ -72,7 +72,7 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
             <AnimatePresence>
               {totalUnreadCount > 0 && (
                 <motion.span
-                  initial={{ scale: 0.7, opacity: 0 }}
+                  initial={false}
                   animate={{ scale: 1, opacity: 1 }}
                   exit={{ scale: 0.7, opacity: 0 }}
                   className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold"
@@ -158,7 +158,7 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 pb-14 md:pb-0">
         {filtered.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             className="p-8 text-center text-slate-400 space-y-2"
           >
@@ -176,7 +176,7 @@ export const ConversationListSidebar: React.FC<ConversationListSidebarProps> = (
             return (
               <motion.div
                 key={conv.id}
-                initial={{ opacity: 0, y: 6 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.18, delay: Math.min(idx * 0.03, 0.25) }}
                 whileTap={{ scale: 0.99 }}

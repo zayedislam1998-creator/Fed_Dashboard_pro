@@ -163,7 +163,7 @@ export const FloatingMessengerWidget: React.FC<FloatingMessengerWidgetProps> = (
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.92 }}
+            initial={false}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.92 }}
             transition={{ type: 'spring', stiffness: 380, damping: 28 }}
@@ -223,7 +223,7 @@ export const FloatingMessengerWidget: React.FC<FloatingMessengerWidgetProps> = (
                     return (
                       <motion.div
                         key={m.id}
-                        initial={{ opacity: 0, y: 6 }}
+                        initial={false}
                         animate={{ opacity: 1, y: 0 }}
                         className={`flex flex-col ${
                           isMine ? 'items-end' : 'items-start'
@@ -325,7 +325,7 @@ export const FloatingMessengerWidget: React.FC<FloatingMessengerWidgetProps> = (
       >
         <div className="relative flex items-center justify-center">
           <MessageCircle className="w-5 h-5" />
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-blue-600 animate-pulse" />
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-blue-600 " />
         </div>
         <span className="hidden sm:inline tracking-tight">Messenger</span>
 

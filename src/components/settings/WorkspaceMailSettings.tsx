@@ -277,12 +277,12 @@ export function WorkspaceMailSettings() {
           <div className="flex items-center gap-2">
             {activeSender ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 " />
                 <span>SMTP Connected &amp; Ready</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-semibold">
-                <span>Sending Paused</span>
+                <span></span>
               </span>
             )}
 
@@ -292,7 +292,7 @@ export function WorkspaceMailSettings() {
               disabled={testingConnection || !data?.accountId}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${testingConnection ? '' : ''}`} />
               <span>Test Connection</span>
             </button>
           </div>

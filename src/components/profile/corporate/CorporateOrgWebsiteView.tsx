@@ -169,7 +169,7 @@ export const CorporateOrgWebsiteView: React.FC<CorporateOrgWebsiteViewProps> = (
     return (
       <motion.div
         ref={containerRef}
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22 }}
         className="max-w-6xl mx-auto px-3 sm:px-8 py-5 sm:py-7 pb-20 space-y-5 text-slate-900 dark:text-slate-100"
@@ -228,7 +228,7 @@ export const CorporateOrgWebsiteView: React.FC<CorporateOrgWebsiteViewProps> = (
                     className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold shadow-xs cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{isSaving ? 'Saving...' : 'Save & Embed URL'}</span>
+                    <span>{'Save & Embed URL'}</span>
                   </button>
 
                   {savedEmbedUrl && (
@@ -296,8 +296,8 @@ export const CorporateOrgWebsiteView: React.FC<CorporateOrgWebsiteViewProps> = (
             <div className="relative w-full h-[640px] sm:h-[760px] bg-slate-100 dark:bg-slate-950">
               {!iframeLoaded && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-slate-500 pointer-events-none">
-                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <span>Loading embedded website...</span>
+                  {null}
+                  <span></span>
                 </div>
               )}
               <iframe
@@ -375,7 +375,7 @@ export const CorporateOrgWebsiteView: React.FC<CorporateOrgWebsiteViewProps> = (
     return (
       <motion.div
         ref={containerRef}
-        initial={{ opacity: 0, y: 8 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22 }}
         className="max-w-5xl mx-auto px-3 sm:px-8 py-6 sm:py-10 pb-20 space-y-6 text-slate-900 dark:text-slate-100"
@@ -447,7 +447,7 @@ export const CorporateOrgWebsiteView: React.FC<CorporateOrgWebsiteViewProps> = (
   return (
     <motion.div
       ref={containerRef}
-      initial={{ opacity: 0, y: 8 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22 }}
       className="relative flex-1 min-h-full pb-20 sm:pb-16 text-slate-900 dark:text-slate-100"

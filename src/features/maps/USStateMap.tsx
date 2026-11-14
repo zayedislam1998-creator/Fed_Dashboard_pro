@@ -6,6 +6,7 @@ import type { USStateMapProps } from './contracts';
 export const USStateMap: React.FC<USStateMapProps> = ({
   mode = 'distribution',
   stateCounts = {},
+  stateUsers = {},
   selectedStateCode = null,
   onSelectState,
   accentColor = '#0B57D0',
@@ -16,7 +17,7 @@ export const USStateMap: React.FC<USStateMapProps> = ({
     <div className={`relative w-full overflow-hidden select-none ${className}`}>
       <svg
         viewBox={US_MAP_VIEWBOX.viewBoxString}
-        className="w-full h-auto max-h-[540px] drop-shadow-xs"
+        className="w-full h-auto max-h-[320px] sm:max-h-[380px] drop-shadow-xs"
         role="img"
         aria-label="Map of the United States showing member distribution by state"
       >
@@ -98,6 +99,7 @@ export const USStateMap: React.FC<USStateMapProps> = ({
                 count={count || (mode === 'profile' || mode === 'preview' ? 1 : 0)}
                 x={st.anchor[0]}
                 y={st.anchor[1]}
+                users={stateUsers[st.code]}
                 isSelected={isSelected}
                 accentColor={accentColor}
                 onClick={() => onSelectState?.(st.code)}

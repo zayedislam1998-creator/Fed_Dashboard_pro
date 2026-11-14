@@ -1,4 +1,5 @@
 import { getStoredSessionToken } from './sessionFetch';
+import { clearNavigationCache } from './navigationCache';
 
 type WorkspaceEventHandler = (eventName: string, payload: any) => void;
 
@@ -8,6 +9,7 @@ let broadcastChannel: BroadcastChannel | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function notifyListeners(eventName: string, payload: any) {
+  if (eventName !== 'connected') clearNavigationCache();
   for (const handler of Array.from(listeners)) {
     try {
       handler(eventName, payload);

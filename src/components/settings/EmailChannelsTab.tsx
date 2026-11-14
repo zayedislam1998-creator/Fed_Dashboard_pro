@@ -165,7 +165,7 @@ export const EmailChannelsTab: React.FC<EmailChannelsTabProps> = ({
               disabled={testingActiveSystemMail || !mailboxesOverview?.primarySystemMail}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-violet-300 dark:border-violet-700 hover:bg-violet-100/60 dark:hover:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-semibold transition-colors disabled:opacity-40 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${testingActiveSystemMail ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${testingActiveSystemMail ? '' : ''}`} />
               <span>Test Connection</span>
             </button>
 
@@ -240,7 +240,7 @@ export const EmailChannelsTab: React.FC<EmailChannelsTabProps> = ({
           {mailboxesOverview?.primarySystemMail && (
             <div className="text-right">
               <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 justify-end">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-500 " />
                 <span>Ready &amp; Verified</span>
               </span>
               <span className="text-[10px] text-slate-400">
@@ -574,7 +574,7 @@ export const EmailChannelsTab: React.FC<EmailChannelsTabProps> = ({
               disabled={isSavingSys}
               className="px-5 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
             >
-              {isSavingSys ? 'Saving...' : 'Save Signature & Defaults'}
+              {'Save Signature & Defaults'}
             </button>
           </div>
         </form>

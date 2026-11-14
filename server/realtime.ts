@@ -134,12 +134,13 @@ export const asyncHandler =
       if (isDbUnavailableError(err)) {
         res.status(503).json({
           ok: false,
-          error: formatDbError(err),
+          error: 'Database service temporarily unavailable.',
           code: 'DB_UNAVAILABLE',
         });
         return;
       }
-      res.status(500).json({ error: err?.message || 'Internal database error' });
+      // SECURITY: Do not leak internal error details to the client
+      res.status(500).json({ error: 'Internal server error' });
     });
   };
 

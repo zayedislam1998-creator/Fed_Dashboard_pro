@@ -82,7 +82,7 @@ export const ChatThreadCanvas: React.FC<ChatThreadCanvasProps> = ({
             </div>
           )}
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            initial={false}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
           >
@@ -173,7 +173,7 @@ export const ChatThreadCanvas: React.FC<ChatThreadCanvasProps> = ({
       <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 space-y-1">
         {messages.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-2"
           >

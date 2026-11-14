@@ -1,8 +1,17 @@
 // Types and contracts for Lightweight US State Map & Member Distribution
 
+export interface StateUserItem {
+  id: string;
+  name: string;
+  email: string;
+  role?: string | null;
+  city?: string | null;
+}
+
 export interface StateCountItem {
   stateCode: string; // 2-letter uppercase ISO / postal code, e.g. "CA", "NY"
   count: number;
+  users?: StateUserItem[];
 }
 
 export interface MemberLocationExcludedBuckets {
@@ -32,6 +41,10 @@ export interface USStateMapProps {
    */
   stateCounts?: Record<string, number>;
   /**
+   * Map of stateCode -> users array
+   */
+  stateUsers?: Record<string, StateUserItem[]>;
+  /**
    * Currently active or selected stateCode
    */
   selectedStateCode?: string | null;
@@ -59,6 +72,7 @@ export interface StateMarkerProps {
   count: number;
   x: number;
   y: number;
+  users?: StateUserItem[];
   isSelected?: boolean;
   onClick?: () => void;
   accentColor?: string;

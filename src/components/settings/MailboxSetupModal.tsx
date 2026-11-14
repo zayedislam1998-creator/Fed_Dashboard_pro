@@ -133,7 +133,7 @@ export const MailboxSetupModal: React.FC<MailboxSetupModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs   duration-150">
       <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
@@ -259,7 +259,7 @@ export const MailboxSetupModal: React.FC<MailboxSetupModalProps> = ({
                   onClick={onVerifyGmail}
                   className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
                 >
-                  {isVerifyingGmail ? 'Testing...' : 'Test Connection'}
+                  Test Connection
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export const MailboxSetupModal: React.FC<MailboxSetupModalProps> = ({
                     disabled={isSavingGmail}
                     className="px-4 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
                   >
-                    {isSavingGmail ? 'Saving...' : 'Save & Connect'}
+                    {'Save & Connect'}
                   </button>
                 </div>
               </div>
@@ -447,7 +447,7 @@ export const MailboxSetupModal: React.FC<MailboxSetupModalProps> = ({
                   onClick={onVerifyServer}
                   className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
                 >
-                  {isVerifyingServer ? 'Testing...' : 'Test Connection'}
+                  Test Connection
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -463,7 +463,7 @@ export const MailboxSetupModal: React.FC<MailboxSetupModalProps> = ({
                     disabled={isSavingServer}
                     className="px-4 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
                   >
-                    {isSavingServer ? 'Saving...' : 'Save & Connect'}
+                    {'Save & Connect'}
                   </button>
                 </div>
               </div>

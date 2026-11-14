@@ -65,7 +65,8 @@ async function sendWorkspaceInviteEmail(params: {
       port: sender.smtpPort,
       secure: sender.smtpSecure,
       auth: { user: sender.username || sender.email, pass },
-      tls: { rejectUnauthorized: false },
+      // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+      tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
     });
 
     const safeName = escapeHtml(params.recipientName);
@@ -420,7 +421,10 @@ export async function buildScopedMemberPreview(userId: string) {
   };
 }
 
-export function registerAuthAndAdminPanelRoutes(app: express.Express) {
+// ============================================================================
+// SECTION: Authentication
+// ============================================================================
+function registerAuthRoutes(app: express.Express) {
   // ============================================================================
   // AUTHENTICATION, OWNER ONBOARDING & MEMBER INVITATION ACCEPTANCE
   // ============================================================================
@@ -1012,7 +1016,12 @@ export function registerAuthAndAdminPanelRoutes(app: express.Express) {
       });
     })
   );
+}
 
+// ============================================================================
+// SECTION: Admin Panel
+// ============================================================================
+function registerAdminPanelRoutes(app: express.Express) {
   // ============================================================================
   // ADMIN PANEL CONTROL CENTER ROUTES (/api/admin/* — Strictly Admin Only)
   // ============================================================================
@@ -1764,4 +1773,12 @@ export function registerAuthAndAdminPanelRoutes(app: express.Express) {
       res.json(preview);
     })
   );
+}
+
+// ============================================================================
+// MAIN ORCHESTRATOR
+// ============================================================================
+export function registerAuthAndAdminPanelRoutes(app: express.Express) {
+  registerAuthRoutes(app);
+  registerAdminPanelRoutes(app);
 }

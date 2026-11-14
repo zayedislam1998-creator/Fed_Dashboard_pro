@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import {
   Menu,
   Search,
@@ -49,14 +49,14 @@ import {
   markNotificationsRead,
 } from '../../services/workspaceApi';
 import { WorkspaceAuthUser } from '../../services/workspaceAuth';
-import type { ServerMailFolder } from '../ServerMailView';
-import type { SettingsSubTab } from '../SettingsView';
-import type { CmhTasksSubTab } from '../CmhTasksView';
-import type { CmhProjectsSubTab } from '../CmhProjectsView';
-import type { CmhFormBuilderSubTab } from '../CmhFormBuilderView';
-import type { TeamsSubTab } from '../TeamsView';
-import type { PostsNoticesSubTab } from '../PostsNoticesView';
-import type { FinanceSubTab } from '../FinanceView';
+import type { ServerMailFolder } from '../mail/ServerMailView';
+import type { SettingsSubTab } from '../settings/SettingsView';
+import type { CmhTasksSubTab } from '../cmh/CmhTasksView';
+import type { CmhProjectsSubTab } from '../cmh/CmhProjectsView';
+import type { CmhFormBuilderSubTab } from '../cmh/CmhFormBuilderView';
+import type { TeamsSubTab } from '../team/TeamsView';
+import type { PostsNoticesSubTab } from '../posts/PostsNoticesView';
+import type { FinanceSubTab } from '../finance/FinanceView';
 
 export interface AppHeaderProps {
   activeModule: WorkspaceModule;
@@ -244,7 +244,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {isQuickCreateOpen && (
-            <div className="ws-animate-in absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
+            <div className=" absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1">
               <div className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400">
                 Quick Create Studio
               </div>
@@ -349,7 +349,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {isThemeMenuOpen && (
-            <div className="ws-animate-in absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-3.5 z-50 text-xs space-y-3">
+            <div className=" absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-3.5 z-50 text-xs space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900 dark:text-slate-100">
                   Appearance Mode
@@ -439,7 +439,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {isNotifMenuOpen && (
-            <div className="ws-animate-in absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 text-xs">
+            <div className=" absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 text-xs">
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-[#F8FAFD] dark:bg-slate-800/70">
                 <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <Bell className="w-4 h-4 text-[#0B57D0]" />
@@ -525,7 +525,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {isAppGridOpen && (
-            <div className="ws-animate-in absolute right-0 mt-2 w-80 max-h-[80vh] overflow-y-auto rounded-2xl bg-[#F8FAFD] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 grid grid-cols-3 gap-2 z-50">
+            <div className=" absolute right-0 mt-2 w-80 max-h-[80vh] overflow-y-auto rounded-2xl bg-[#F8FAFD] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 grid grid-cols-3 gap-2 z-50">
               {(
                 [
                   { id: 'main_feed', label: 'Main', icon: LayoutGrid, color: 'text-[#0B57D0]' },
@@ -832,3 +832,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     </header>
   );
 };
+
+
+

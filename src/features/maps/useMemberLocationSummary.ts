@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchMemberLocationSummary } from '../../services/api/analyticsApi';
-import type { MemberLocationSummary } from './contracts';
+import type { MemberLocationSummary, StateUserItem } from './contracts';
 
 export function useMemberLocationSummary() {
   const [summary, setSummary] = useState<MemberLocationSummary | null>(null);
@@ -34,9 +34,22 @@ export function useMemberLocationSummary() {
     return map;
   }, [summary]);
 
+  // Derived lookup map: stateCode -> users array
+  const stateUsers = useMemo<Record<string, StateUserItem[]>>(() => {
+    if (!summary?.states) return {};
+    const map: Record<string, StateUserItem[]> = {};
+    for (const item of summary.states) {
+      if (item.users && item.users.length > 0) {
+        map[item.stateCode] = item.users;
+      }
+    }
+    return map;
+  }, [summary]);
+
   return {
     summary,
     stateCounts,
+    stateUsers,
     loading,
     error,
     reload: loadData,

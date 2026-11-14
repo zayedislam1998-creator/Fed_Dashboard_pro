@@ -264,7 +264,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           title: String(title).trim(),
           description: String(description || '').trim(),
           formCategory: formCategory || existing?.formCategory || 'GENERAL',
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+          accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
           invitedMemberIdsJson: Array.isArray(invitedMemberIds)
             ? invitedMemberIds
             : (existing?.invitedMemberIdsJson ?? []),
@@ -284,7 +284,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           title: String(title).trim(),
           description: String(description || '').trim(),
           formCategory: formCategory || 'GENERAL',
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+          accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
           invitedMemberIdsJson: Array.isArray(invitedMemberIds) ? invitedMemberIds : [],
           invitedTeamIdsJson: Array.isArray(invitedTeamIds) ? invitedTeamIds : [],
           submitButtonLabel: String(submitButtonLabel || 'Submit').trim(),
@@ -369,7 +369,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
             status: status || existing?.status || 'To Do',
             priority: priority || existing?.priority || 'Medium',
             dueDate: String(dueDate ?? existing?.dueDate ?? ''),
-            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
             assignedMemberIdsJson: Array.isArray(assignedMemberIds)
               ? assignedMemberIds
               : (existing?.assignedMemberIdsJson ?? []),
@@ -389,7 +389,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
             status: status || 'To Do',
             priority: priority || 'Medium',
             dueDate: String(dueDate || 'Upcoming'),
-            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
             assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
             assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
             customFieldValuesJson: customFieldValues || {},
@@ -499,7 +499,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
             priority: priority || existing?.priority || 'High',
             deadline: String(deadline ?? existing?.deadline ?? ''),
             budget: String(budget ?? existing?.budget ?? ''),
-            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
             assignedMemberIdsJson: Array.isArray(assignedMemberIds)
               ? assignedMemberIds
               : (existing?.assignedMemberIdsJson ?? []),
@@ -520,7 +520,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
             priority: priority || 'High',
             deadline: String(deadline || 'Q4 2026'),
             budget: String(budget || 'TBD'),
-            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            accessMode: 'PRIVATE', // SECURITY: Default to PRIVATE, not PUBLIC
             assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
             assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
             customFieldValuesJson: customFieldValues || {},
@@ -692,7 +692,9 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
     '/api/cmh/public/:targetType/:id',
     asyncHandler(async (req, res) => {
       const { targetType, id } = req.params;
-      const members = await prisma.workspaceMember.findMany({ orderBy: { timestampMs: 'desc' } });
+
+      // SECURITY: Only allow public access to explicitly PUBLIC resources
+      // SECURITY: Never expose member PII (email, phone, inviteToken) to unauthenticated requests
 
       if (targetType === 'form') {
         const form = await prisma.cmhFormTemplate.findUnique({ where: { id } });
@@ -700,12 +702,16 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Form not found.' });
           return;
         }
+        if (form.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This form is not publicly accessible.' });
+          return;
+        }
         const dto = { ...toCmhFormDto(form), submissions: [] };
         res.json({
           targetType: 'form',
           item: dto,
           template: dto,
-          members: members.map(toWorkspaceMemberDto),
+          // SECURITY: Omit members from public response — no PII leak
         });
         return;
       }
@@ -716,6 +722,10 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Task not found.' });
           return;
         }
+        if (task.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This task is not publicly accessible.' });
+          return;
+        }
         const template =
           (await prisma.cmhFormTemplate.findUnique({ where: { id: task.formTemplateId } })) ||
           (await prisma.cmhFormTemplate.findFirst({ orderBy: { timestampMs: 'desc' } }));
@@ -723,7 +733,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           targetType: 'task',
           item: { ...toCmhTaskDto(task), submissions: [] },
           template: template ? { ...toCmhFormDto(template), submissions: [] } : undefined,
-          members: members.map(toWorkspaceMemberDto),
+          // SECURITY: Omit members from public response
         });
         return;
       }
@@ -734,6 +744,10 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Project not found.' });
           return;
         }
+        if (project.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This project is not publicly accessible.' });
+          return;
+        }
         const template =
           (await prisma.cmhFormTemplate.findUnique({ where: { id: project.formTemplateId } })) ||
           (await prisma.cmhFormTemplate.findFirst({ orderBy: { timestampMs: 'desc' } }));
@@ -741,7 +755,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           targetType: 'project',
           item: { ...toCmhProjectDto(project), submissions: [] },
           template: template ? { ...toCmhFormDto(template), submissions: [] } : undefined,
-          members: members.map(toWorkspaceMemberDto),
+          // SECURITY: Omit members from public response
         });
         return;
       }
@@ -754,7 +768,8 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
     '/api/cmh/public/:targetType/:id/submit',
     asyncHandler(async (req, res) => {
       const { targetType, id } = req.params;
-      const { submitterName, submitterEmail, values, statusUpdate, originUrl } = req.body || {};
+      // SECURITY: Ignore statusUpdate from unauthenticated public submissions — guests cannot change status
+      const { submitterName, submitterEmail, values, originUrl } = req.body || {};
 
       if (!submitterEmail || !String(submitterEmail).trim()) {
         res.status(400).json({ error: 'Please provide your email address to submit.' });
@@ -781,6 +796,11 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
         const form = await prisma.cmhFormTemplate.findUnique({ where: { id } });
         if (!form) {
           res.status(404).json({ error: 'Form not found.' });
+          return;
+        }
+        // SECURITY: Only allow submissions to PUBLIC forms
+        if (form.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This form is not publicly accessible.' });
           return;
         }
         const submission = {
@@ -828,9 +848,15 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Task not found.' });
           return;
         }
+        // SECURITY: Only allow submissions to PUBLIC tasks
+        if (task.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This task is not publicly accessible.' });
+          return;
+        }
         const template = await prisma.cmhFormTemplate.findUnique({
           where: { id: task.formTemplateId },
         });
+        // SECURITY: Ignore statusUpdate from public submissions — guests cannot change task status
         const submission = {
           id: submissionId,
           targetType: 'TASK',
@@ -840,12 +866,12 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           submitterEmail: cleanEmail,
           submittedAt: nowStr,
           timestamp: Date.now(),
-          values: { ...(values || {}), ...(statusUpdate ? { Status: statusUpdate } : {}) },
+          values: { ...(values || {}) },
         };
         const { updated: updatedTask, submission: savedSubmission, duplicate } = await appendTaskSubmissionAtomic(
           id,
           submission,
-          statusUpdate ? String(statusUpdate) : undefined
+          undefined
         );
         const taskDto = toCmhTaskDto(updatedTask);
         if (!duplicate) {
@@ -882,9 +908,15 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Project not found.' });
           return;
         }
+        // SECURITY: Only allow submissions to PUBLIC projects
+        if (project.accessMode !== 'PUBLIC') {
+          res.status(403).json({ error: 'This project is not publicly accessible.' });
+          return;
+        }
         const template = await prisma.cmhFormTemplate.findUnique({
           where: { id: project.formTemplateId },
         });
+        // SECURITY: Ignore statusUpdate from public submissions — guests cannot change project status
         const submission = {
           id: submissionId,
           targetType: 'PROJECT',
@@ -894,12 +926,12 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           submitterEmail: cleanEmail,
           submittedAt: nowStr,
           timestamp: Date.now(),
-          values: { ...(values || {}), ...(statusUpdate ? { Status: statusUpdate } : {}) },
+          values: { ...(values || {}) },
         };
         const { updated: updatedProject, submission: savedSubmission, duplicate } = await appendProjectSubmissionAtomic(
           id,
           submission,
-          statusUpdate ? String(statusUpdate) : undefined
+          undefined
         );
         const projectDto = toCmhProjectDto(updatedProject);
         if (!duplicate) {

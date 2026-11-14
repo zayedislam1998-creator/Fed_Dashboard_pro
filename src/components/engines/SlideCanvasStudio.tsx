@@ -671,7 +671,7 @@ export const SlideCanvasStudio: React.FC<SlideCanvasStudioProps> = ({
               className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
-              {saving ? 'Saving...' : 'Save'}
+              {'Save'}
             </button>
           )}
         </div>

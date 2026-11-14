@@ -52,7 +52,7 @@ export const CorporateWebsiteHeader: React.FC<CorporateWebsiteHeaderProps> = ({
 
   return (
     <motion.header
-      initial={{ opacity: 0, y: 12 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       className="relative w-full rounded-[28px] bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/90 shadow-[0_18px_50px_-15px_rgba(15,23,42,0.08)] overflow-hidden transition-all"

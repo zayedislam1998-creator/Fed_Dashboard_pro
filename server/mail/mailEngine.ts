@@ -162,8 +162,9 @@ export async function syncAccountImapInbox(
     logger: false,
     connectionTimeout: 10000,
     greetingTimeout: 8000,
+    // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
     tls: {
-      rejectUnauthorized: false,
+      rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false',
     },
   });
 
@@ -307,7 +308,8 @@ async function verifyMailConnection(params: {
     logger: false,
     connectionTimeout: 10000,
     greetingTimeout: 8000,
-    tls: { rejectUnauthorized: false },
+    // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+    tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
   });
 
   try {
@@ -330,7 +332,8 @@ async function verifyMailConnection(params: {
       secure: params.smtpSecure,
       auth: { user: params.authUser, pass: params.password },
       connectionTimeout: 10000,
-      tls: { rejectUnauthorized: false },
+      // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+      tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
     });
     await transporter.verify();
     smtpOk = true;
@@ -842,7 +845,8 @@ function registerMailProviderRoutes(app: express.Express, kind: 'server-mail' | 
             pass,
           },
           connectionTimeout: 12000,
-          tls: { rejectUnauthorized: false },
+          // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+          tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
         });
 
         await transporter.sendMail({

@@ -221,7 +221,8 @@ function createSmtpTransport(sender: UnifiedSystemSender) {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 20000,
-    tls: { rejectUnauthorized: false },
+    // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+    tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
   });
 }
 
@@ -642,7 +643,8 @@ export function registerWorkspaceMailAutomation(app: Express) {
           auth: { user: cleanEmail, pass: cleanPass },
           connectionTimeout: 8000,
           greetingTimeout: 8000,
-          tls: { rejectUnauthorized: false },
+          // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+          tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
         });
         await testTransporter.verify();
         smtpVerified = true;

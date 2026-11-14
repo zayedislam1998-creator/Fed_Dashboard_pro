@@ -197,7 +197,7 @@ export const CorporatePhotoGallery: React.FC<CorporatePhotoGalleryProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md   duration-200"
           onClick={() => setLightboxPhoto(null)}
         >
           <div

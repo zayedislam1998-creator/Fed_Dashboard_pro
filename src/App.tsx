@@ -1,9 +1,9 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition, lazy, Suspense } from 'react';
 import { Bell, X } from 'lucide-react';
 import {
   WorkspaceUser,
@@ -29,26 +29,26 @@ import {
   fetchSystemSettings,
   fetchWorkspaceTeamsAndMembers,
 } from './services/workspaceApi';
-import type { ServerMailFolder } from './components/ServerMailView';
-import type { DocsSubTab } from './components/DocsView';
-import type { SlidesSubTab } from './components/SlidesView';
-import type { FormsSubTab } from './components/FormsView';
-import type { MeetSubTab } from './components/MeetView';
-import type { TeamsSubTab } from './components/TeamsView';
-import type { PostsNoticesSubTab } from './components/PostsNoticesView';
-import type { FileManagerSubTab } from './components/FileManagerView';
-import type { CmhTasksSubTab } from './components/CmhTasksView';
-import type { CmhProjectsSubTab } from './components/CmhProjectsView';
-import type { CmhFormBuilderSubTab } from './components/CmhFormBuilderView';
-import type { SettingsSubTab } from './components/SettingsView';
-import type { SheetsSubTab } from './components/SheetsView';
-import type { CalendarSubTab } from './components/CalendarView';
-import type { FinanceSubTab } from './components/FinanceView';
-import type { CrmSubTab } from './components/CrmTicketsView';
-import type { HrSubTab } from './components/HrManagementView';
-import type { ChatSubTab } from './components/TeamChatView';
-import type { WikiSubTab } from './components/WikiKnowledgeView';
-import type { AutomationSubTab } from './components/AutomationEngineView';
+import type { ServerMailFolder } from './components/mail/ServerMailView';
+import type { DocsSubTab } from './components/docs/DocsView';
+import type { SlidesSubTab } from './components/slides/SlidesView';
+import type { FormsSubTab } from './components/forms/FormsView';
+import type { MeetSubTab } from './components/meetings/MeetView';
+import type { TeamsSubTab } from './components/team/TeamsView';
+import type { PostsNoticesSubTab } from './components/posts/PostsNoticesView';
+import type { FileManagerSubTab } from './components/filemanager/FileManagerView';
+import type { CmhTasksSubTab } from './components/cmh/CmhTasksView';
+import type { CmhProjectsSubTab } from './components/cmh/CmhProjectsView';
+import type { CmhFormBuilderSubTab } from './components/cmh/CmhFormBuilderView';
+import type { SettingsSubTab } from './components/settings/SettingsView';
+import type { SheetsSubTab } from './components/sheets/SheetsView';
+import type { CalendarSubTab } from './components/calendar/CalendarView';
+import type { FinanceSubTab } from './components/finance/FinanceView';
+import type { CrmSubTab } from './components/crm/CrmTicketsView';
+import type { HrSubTab } from './components/hr/HrManagementView';
+import type { ChatSubTab } from './components/team/TeamChatView';
+import type { WikiSubTab } from './components/wiki/WikiKnowledgeView';
+import type { AutomationSubTab } from './components/automation/AutomationEngineView';
 import { subscribeWorkspaceEvents } from './services/realtimeBus';
 import {
   type EvaluatedCapabilitiesClient,
@@ -67,29 +67,22 @@ import {
 } from './components/layout';
 
 const PublicFormView = lazy(() =>
-  import('./components/PublicFormView').then((m) => ({ default: m.PublicFormView }))
+  import('./components/public/PublicFormView').then((m) => ({ default: m.PublicFormView }))
 );
 const PublicMemberInviteView = lazy(() =>
-  import('./components/PublicMemberInviteView').then((m) => ({ default: m.PublicMemberInviteView }))
+  import('./components/public/PublicMemberInviteView').then((m) => ({ default: m.PublicMemberInviteView }))
 );
 const PublicCmhPortalView = lazy(() =>
-  import('./components/PublicCmhPortalView').then((m) => ({ default: m.PublicCmhPortalView }))
+  import('./components/public/PublicCmhPortalView').then((m) => ({ default: m.PublicCmhPortalView }))
 );
 const SimpleDashboardView = lazy(() =>
-  import('./components/SimpleDashboardView').then((m) => ({ default: m.SimpleDashboardView }))
+  import('./components/dashboard/SimpleDashboardView').then((m) => ({ default: m.SimpleDashboardView }))
 );
 const MemberPortalShell = lazy(() =>
   import('./components/member/MemberPortalShell').then((m) => ({ default: m.MemberPortalShell }))
 );
 
-const ModuleLoadingFallback: React.FC = () => (
-  <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500 animate-in fade-in duration-150">
-    <div className="flex items-center gap-2.5 text-xs font-semibold">
-      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      <span>Loading module...</span>
-    </div>
-  </div>
-);
+
 
 export default function App() {
   const [publicFormIdFromUrl, setPublicFormIdFromUrl] = useState<string | null>(() => {
@@ -118,7 +111,11 @@ export default function App() {
   const [wsUser, setWsUser] = useState<WorkspaceAuthUser | null>(null);
   const [wsCapabilities, setWsCapabilities] = useState<EvaluatedCapabilitiesClient | null>(null);
 
-  const [activeModule, setActiveModule] = useState<WorkspaceModule>('overview');
+  const [activeModule, setActiveModuleState] = useState<WorkspaceModule>('overview');
+  const setActiveModule = useCallback<React.Dispatch<React.SetStateAction<WorkspaceModule>>>((next) => {
+    // Keep the current page mounted until the next lazy module is ready.
+    startTransition(() => setActiveModuleState(next));
+  }, []);
   const landingApplied = useRef(false);
   const [feedSource, setFeedSource] = useState<{ type: string; id: string } | null>(null);
   const [needsAuth, setNeedsAuth] = useState<boolean>(true);
@@ -438,7 +435,7 @@ export default function App() {
   if (publicFormIdFromUrl || previewPublicFormId) {
     const activeFormId = previewPublicFormId || publicFormIdFromUrl!;
     return (
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <Suspense fallback={null}>
         <PublicFormView
           formId={activeFormId}
           onExitPreview={
@@ -460,7 +457,7 @@ export default function App() {
   if (publicInviteIdFromUrl || previewMemberInviteId) {
     const activeInviteId = previewMemberInviteId || publicInviteIdFromUrl!;
     return (
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <Suspense fallback={null}>
         <PublicMemberInviteView
           inviteId={activeInviteId}
           onExitPreview={
@@ -482,7 +479,7 @@ export default function App() {
   if (publicCmhFromUrl || previewCmhParam) {
     const activeCmhParam = previewCmhParam || publicCmhFromUrl!;
     return (
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <Suspense fallback={null}>
         <PublicCmhPortalView
           cmhParam={activeCmhParam}
           onExitPreview={
@@ -501,17 +498,13 @@ export default function App() {
   }
 
   if (wsSessionLoading) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-[#F8FAFC] text-slate-600 text-sm font-medium">
-        Loading Workspace Pro...
-      </div>
-    );
+    return null;
   }
 
   // Public Landing Dashboard
   if (appInviteTokenFromUrl || !wsUser || !wsCapabilities) {
     return (
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <Suspense fallback={null}>
         <SimpleDashboardView
           inviteToken={appInviteTokenFromUrl}
           onAuthenticated={(authedUser, caps) => {
@@ -528,7 +521,7 @@ export default function App() {
   // Member Dashboard UI
   if (wsUser.role === 'MEMBER' || wsCapabilities.isMember) {
     return (
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <Suspense fallback={null}>
         <MemberPortalShell
           user={wsUser}
           capabilities={wsCapabilities}
@@ -794,7 +787,7 @@ export default function App() {
                 {liveToastNotif.description}
               </div>
               <div className="text-[10px] text-blue-300 font-semibold mt-1">
-                Click to view →
+                Click to view â†’
               </div>
             </div>
           </button>
@@ -825,3 +818,5 @@ export default function App() {
     </div>
   );
 }
+
+

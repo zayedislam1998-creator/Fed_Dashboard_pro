@@ -1,4 +1,5 @@
 import { wsFetch as fetch } from '../sessionFetch';
+import { readNavigationData } from '../navigationCache';
 import { type ParsedEmail, injectRealtimeAdminInboxMessage } from './mailApi';
 import { type WorkspaceMemberItem, type WorkspaceTeamGroup } from './teamsApi';
 
@@ -207,6 +208,10 @@ export const COUNTRY_STATE_CITY_DIRECTORY: Record<
   },
 };
 
+export function readCmhWorkspaceSnapshot(): Awaited<ReturnType<typeof fetchCmhWorkspaceBootstrap>> | undefined {
+  return readNavigationData('/api/cmh/bootstrap');
+}
+
 export async function fetchCmhWorkspaceBootstrap(_force = false): Promise<{
   forms: CmhFormTemplate[];
   tasks: CmhTaskItem[];
@@ -216,7 +221,7 @@ export async function fetchCmhWorkspaceBootstrap(_force = false): Promise<{
   teamGroups: WorkspaceTeamGroup[];
   adminInboxMessages: ParsedEmail[];
 }> {
-  const res = await fetch('/api/cmh/bootstrap');
+  const res = await fetch('/api/cmh/bootstrap', _force ? { cache: 'reload' } : undefined);
   if (!res.ok) {
     throw new Error('Failed to load CMH App data.');
   }

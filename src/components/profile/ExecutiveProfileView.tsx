@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+﻿import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Edit3, ArrowRight } from 'lucide-react';
 import {
@@ -28,14 +28,14 @@ import { ResumeCertificationsSection } from './ResumeCertificationsSection';
 import { ResumeContactSection } from './ResumeContactSection';
 import { DigitalQrCardModal } from './DigitalQrCardModal';
 import { CorporateOrgWebsiteView } from './corporate/CorporateOrgWebsiteView';
-import type { ImageEditorTarget, ImageEditorSaveResult } from '../ImageEditorModal';
-import type { UniversalEngineTarget } from '../UniversalDocumentEngineModal';
+import type { ImageEditorTarget, ImageEditorSaveResult } from '../shared/ImageEditorModal';
+import type { UniversalEngineTarget } from '../shared/UniversalDocumentEngineModal';
 
 const ImageEditorModal = React.lazy(() =>
-  import('../ImageEditorModal').then((m) => ({ default: m.ImageEditorModal }))
+  import('../shared/ImageEditorModal').then((m) => ({ default: m.ImageEditorModal }))
 );
 const UniversalDocumentEngineModal = React.lazy(() =>
-  import('../UniversalDocumentEngineModal').then((m) => ({
+  import('../shared/UniversalDocumentEngineModal').then((m) => ({
     default: m.UniversalDocumentEngineModal,
   }))
 );
@@ -531,7 +531,7 @@ export const ExecutiveProfileView: React.FC<ExecutiveProfileViewProps> = ({
       <AnimatePresence>
         {(saveSuccessMsg || errorMsg) && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             className="max-w-5xl mx-auto px-3 sm:px-8 pt-3 sm:pt-4 space-y-2 print:hidden"
@@ -572,7 +572,7 @@ export const ExecutiveProfileView: React.FC<ExecutiveProfileViewProps> = ({
         {profileMode === 'PERSONAL' ? (
           <motion.div
             key="personal-resume-studio"
-            initial={{ opacity: 0, y: 12 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.24, ease: 'easeOut' }}
@@ -818,7 +818,7 @@ export const ExecutiveProfileView: React.FC<ExecutiveProfileViewProps> = ({
         ) : (
           <motion.div
             key="corporate-website-studio"
-            initial={{ opacity: 0, y: 12 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.24, ease: 'easeOut' }}
@@ -876,3 +876,5 @@ export const ExecutiveProfileView: React.FC<ExecutiveProfileViewProps> = ({
     </div>
   );
 };
+
+

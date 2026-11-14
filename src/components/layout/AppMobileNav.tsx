@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -9,10 +9,10 @@ import {
 } from 'lucide-react';
 import { WorkspaceModule } from './types';
 import { NavigationContent, NavigationContentProps } from './AppSidebar';
-import type { PostsNoticesSubTab } from '../PostsNoticesView';
-import type { CmhProjectsSubTab } from '../CmhProjectsView';
-import type { CmhTasksSubTab } from '../CmhTasksView';
-import type { TeamsSubTab } from '../TeamsView';
+import type { PostsNoticesSubTab } from '../posts/PostsNoticesView';
+import type { CmhProjectsSubTab } from '../cmh/CmhProjectsView';
+import type { CmhTasksSubTab } from '../cmh/CmhTasksView';
+import type { TeamsSubTab } from '../team/TeamsView';
 
 export interface AppMobileNavProps extends NavigationContentProps {
   isMobileDrawerOpen: boolean;
@@ -64,7 +64,7 @@ export const AppMobileNav: React.FC<AppMobileNavProps> = (props) => {
             }}
           >
             <motion.div
-              initial={{ opacity: 0 }}
+              initial={false}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px]"
@@ -160,3 +160,4 @@ export const AppMobileNav: React.FC<AppMobileNavProps> = (props) => {
     </>
   );
 };
+

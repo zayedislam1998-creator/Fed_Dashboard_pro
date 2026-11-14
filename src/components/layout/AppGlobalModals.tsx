@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+﻿import React, { Suspense, lazy } from 'react';
 import { X } from 'lucide-react';
 import { WorkspaceAuthUser } from '../../services/workspaceAuth';
 import { WorkspaceModule } from './types';
@@ -117,3 +117,4 @@ export const AppGlobalModals: React.FC<AppGlobalModalsProps> = ({
     </>
   );
 };
+

@@ -43,7 +43,7 @@ export const SystemMailSetupModal: React.FC<SystemMailSetupModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs   duration-150">
       <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-violet-50/40 dark:bg-violet-950/20">
@@ -214,7 +214,7 @@ export const SystemMailSetupModal: React.FC<SystemMailSetupModalProps> = ({
                 disabled={sysSaving}
                 className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 transition-colors cursor-pointer"
               >
-                {sysSaving ? 'Verifying & Saving...' : 'Save & Activate System Mail'}
+                {'Save & Activate System Mail'}
               </button>
             </div>
           </form>

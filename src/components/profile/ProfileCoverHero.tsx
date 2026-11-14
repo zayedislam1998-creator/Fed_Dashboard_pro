@@ -56,7 +56,7 @@ export const ProfileCoverHero: React.FC<ProfileCoverHeroProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className="relative w-full rounded-[28px] overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/90 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.08)] transition-all"
@@ -133,7 +133,7 @@ export const ProfileCoverHero: React.FC<ProfileCoverHeroProps> = ({
         <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 sm:gap-6 -mt-16 sm:-mt-20 mb-5 relative z-10">
           {/* Avatar Frame */}
           <motion.div
-            initial={{ scale: 0.92, opacity: 0 }}
+            initial={false}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.06, type: 'spring', stiffness: 300, damping: 24 }}
             className="relative group"
@@ -209,9 +209,7 @@ export const ProfileCoverHero: React.FC<ProfileCoverHeroProps> = ({
                     : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700'
                 }`}
               >
-                {isSaving ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : isEditing ? (
+                {isEditing ? (
                   <Check className="w-4 h-4" />
                 ) : (
                   <Edit3 className="w-4 h-4" />

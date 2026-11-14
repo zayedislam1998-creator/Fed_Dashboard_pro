@@ -76,7 +76,7 @@ export const StorageAndDatabaseTab: React.FC<StorageAndDatabaseTabProps> = ({
                   PostgreSQL Relational Database
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
-                  {catalogInfo?.connected ? 'Live & Connected' : 'Checking...'}
+                  {catalogInfo?.connected ? 'Live & Connected' : 'Connection status unavailable'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -92,8 +92,8 @@ export const StorageAndDatabaseTab: React.FC<StorageAndDatabaseTabProps> = ({
               disabled={isLoadingCatalog}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCatalog ? 'animate-spin' : ''}`} />
-              <span>{isLoadingCatalog ? 'Refreshing...' : 'Refresh Stats'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${''}`} />
+              <span>{'Refresh Stats'}</span>
             </button>
           </div>
         </div>
@@ -181,7 +181,7 @@ export const StorageAndDatabaseTab: React.FC<StorageAndDatabaseTabProps> = ({
         <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
           {filteredTables.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500">
-              {tables.length === 0 ? 'Loading database catalog...' : 'No matching tables found.'}
+              {tables.length === 0 ? '' : 'No matching tables found.'}
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -244,7 +244,7 @@ export const StorageAndDatabaseTab: React.FC<StorageAndDatabaseTabProps> = ({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isCleaningStorage ? 'Cleaning...' : 'Clean Cache & Temp Files'}</span>
+              <span>Clean Cache & Temp Files</span>
             </button>
           </div>
         </div>
@@ -284,7 +284,7 @@ export const StorageAndDatabaseTab: React.FC<StorageAndDatabaseTabProps> = ({
             </div>
           </div>
         ) : (
-          <div className="text-xs text-slate-500">Loading storage metrics...</div>
+          <div className="text-xs text-slate-500"></div>
         )}
       </div>
 

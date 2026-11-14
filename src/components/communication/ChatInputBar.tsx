@@ -1,16 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  Send,
-  Paperclip,
-  Image as ImageIcon,
-  FileText,
-  FolderOpen,
-  Mic,
-  Square,
-  X,
-  Smile,
-  Loader2,
-} from 'lucide-react';
+import { Send, Paperclip, Image as ImageIcon, FileText, FolderOpen, Mic, Square, X, Smile } from 'lucide-react';
 import {
   CommunicationAttachment,
   CommunicationMessageItem,
@@ -250,9 +239,9 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
       {/* Main Input Dock */}
       {isRecording ? (
         /* Voice Recording Dock */
-        <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 animate-pulse">
+        <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 ">
           <div className="flex items-center gap-2 text-rose-600 font-semibold text-xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping" />
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-600 " />
             <span>Recording Voice Memo: {formatTimer(recordingSeconds)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -288,7 +277,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
             </button>
 
             {isAttachmentMenuOpen && (
-              <div className="absolute bottom-full left-0 mb-2 w-48 p-1.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl space-y-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute bottom-full left-0 mb-2 w-48 p-1.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl space-y-1 z-30    duration-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -391,9 +380,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
             className="p-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 hover:shadow-lg disabled:opacity-40 transition-all cursor-pointer shrink-0"
             title="Send"
           >
-            {isUploading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
+            {(
               <Send className="w-4 h-4" />
             )}
           </button>

@@ -1,5 +1,5 @@
-import React from 'react';
-import { FeedPreferences } from '../WorkspaceFeedView';
+﻿import React from 'react';
+import { FeedPreferences } from '../feed/WorkspaceFeedView';
 
 export const FeedSettingsTab: React.FC = () => {
   return (
@@ -9,3 +9,4 @@ export const FeedSettingsTab: React.FC = () => {
     </section>
   );
 };
+

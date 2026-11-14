@@ -1,4 +1,4 @@
-import { WorkspaceFeedView } from '../WorkspaceFeedView';
+﻿import { WorkspaceFeedView } from '../feed/WorkspaceFeedView';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -365,18 +365,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
 
   const renderMainContent = () => {
     if (loading || !data) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center space-y-3">
-            <div className="w-10 h-10 rounded-2xl mx-auto bg-[var(--mp-accent-soft)] text-[var(--mp-accent)] flex items-center justify-center animate-pulse">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <p className="text-sm font-medium text-[var(--mp-text-muted)]">
-              Loading your workspace...
-            </p>
-          </div>
-        </div>
-      );
+      return null;
     }
 
     if (activeModule === 'account') {
@@ -529,7 +518,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-900 flex items-center justify-between gap-3 shrink-0">
           <span className="inline-flex items-center gap-2 font-semibold">
             <Eye className="w-4 h-4 shrink-0" />
-            Admin Preview: Viewing Member Dashboard as {effectiveUser.name} ({effectiveUser.email}) — Read Only
+            Admin Preview: Viewing Member Dashboard as {effectiveUser.name} ({effectiveUser.email}) â€” Read Only
           </span>
           <button
             type="button"
@@ -616,7 +605,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
             </button>
 
             {isThemeMenuOpen && (
-              <div className="ws-animate-in absolute right-0 mt-2 w-52 rounded-2xl bg-white border border-[var(--mp-border)] shadow-xl p-2 z-50 space-y-1 text-xs">
+              <div className=" absolute right-0 mt-2 w-52 rounded-2xl bg-white border border-[var(--mp-border)] shadow-xl p-2 z-50 space-y-1 text-xs">
                 <div className="px-2.5 py-1 text-[11px] font-bold text-[var(--mp-text-muted)]">
                   Member Portal Theme
                 </div>
@@ -660,7 +649,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
             </button>
 
             {isAppGridOpen && (
-              <div className="ws-animate-in absolute right-0 mt-2 w-72 max-h-[75dvh] overflow-y-auto rounded-2xl bg-white border border-[var(--mp-border)] shadow-xl p-3 grid grid-cols-3 gap-2 z-50">
+              <div className=" absolute right-0 mt-2 w-72 max-h-[75dvh] overflow-y-auto rounded-2xl bg-white border border-[var(--mp-border)] shadow-xl p-3 grid grid-cols-3 gap-2 z-50">
                 {allowedApps.map((app) => {
                   const Icon = app.icon;
                   const active = activeModule === app.id;
@@ -703,7 +692,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
             </button>
 
             {isProfileMenuOpen && (
-              <div className="ws-animate-in absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-[var(--mp-border)] shadow-2xl p-3 space-y-2.5 z-50 text-xs">
+              <div className=" absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-[var(--mp-border)] shadow-2xl p-3 space-y-2.5 z-50 text-xs">
                 <div className="p-3 rounded-xl bg-[var(--mp-surface-subtle)] flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-bold text-sm text-[var(--mp-text)] truncate">
@@ -806,7 +795,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
           {isMobileDrawerOpen && (
             <div className="md:hidden fixed inset-0 z-50 flex">
               <motion.div
-                initial={{ opacity: 0 }}
+                initial={false}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px]"
@@ -845,7 +834,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeModule}
-                initial={{ opacity: 0, y: 8 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
@@ -862,7 +851,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.94 }}
+            initial={false}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.94 }}
             role="status"
@@ -920,3 +909,4 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
     </div>
   );
 };
+

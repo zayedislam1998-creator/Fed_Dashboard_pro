@@ -181,7 +181,8 @@ function buildPgPoolConfig(connectionUrl: string): PoolConfig {
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS) || 30_000,
     connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 10_000,
     allowExitOnIdle: false,
-    ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    // SECURITY: TLS certificate validation — set PG_TLS_STRICT=true in production
+    ...(useSsl ? { ssl: { rejectUnauthorized: process.env.PG_TLS_STRICT === 'true' } } : {}),
   };
 }
 

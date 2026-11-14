@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CommunicationConversationItem,
@@ -15,16 +15,16 @@ import { ConversationListSidebar } from './ConversationListSidebar';
 import { ChatThreadCanvas } from './ChatThreadCanvas';
 import { NewConversationModal } from './NewConversationModal';
 import { MessageSquare, ShieldCheck } from 'lucide-react';
-import type { UniversalEngineTarget } from '../UniversalDocumentEngineModal';
+import type { UniversalEngineTarget } from '../shared/UniversalDocumentEngineModal';
 
 const UniversalDocumentEngineModal = lazy(() =>
-  import('../UniversalDocumentEngineModal').then((m) => ({
+  import('../shared/UniversalDocumentEngineModal').then((m) => ({
     default: m.UniversalDocumentEngineModal,
   }))
 );
 
 const FileManagerPickerModal = lazy(() =>
-  import('../FileManagerPickerModal').then((m) => ({
+  import('../filemanager/FileManagerPickerModal').then((m) => ({
     default: m.FileManagerPickerModal,
   }))
 );
@@ -297,7 +297,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       <AnimatePresence>
         {errorBanner && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
+            initial={false}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="px-4 py-2 bg-rose-50 dark:bg-rose-950/60 border-b border-rose-200 text-xs text-rose-700 dark:text-rose-200 flex items-center justify-between shrink-0 overflow-hidden"
@@ -308,7 +308,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
               onClick={() => setErrorBanner(null)}
               className="text-rose-500 hover:text-rose-800 font-bold"
             >
-              ✕
+              âœ•
             </button>
           </motion.div>
         )}
@@ -343,7 +343,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
             {activeConversation ? (
               <motion.div
                 key={activeConversation.id}
-                initial={{ opacity: 0, x: 14 }}
+                initial={false}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -14 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
@@ -370,7 +370,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
               /* Desktop Empty State */
               <motion.div
                 key="empty-chat"
-                initial={{ opacity: 0, scale: 0.96 }}
+                initial={false}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.2 }}
@@ -391,7 +391,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                 </p>
                 <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold pt-2">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>End-to-End Workspace Encrypted · Instant Event Push</span>
+                  <span>End-to-End Workspace Encrypted Â· Instant Event Push</span>
                 </div>
               </motion.div>
             )}
@@ -430,3 +430,4 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     </div>
   );
 };
+

@@ -82,7 +82,7 @@ function deriveMasterKey(): Buffer {
     process.env.DATABASE_URL ||
     'workspace-pro-postgres-vault';
   if (process.env.NODE_ENV === 'production' && !process.env.WORKSPACE_MASTER_KEY) {
-    console.warn(
+    console.error(
       '[Security] WORKSPACE_MASTER_KEY is not set in production. Set a fixed secret in .env so encrypted mail credentials survive URL changes.'
     );
   }
@@ -93,15 +93,24 @@ const MASTER_KEY = deriveMasterKey();
 
 export function hashPasswordScrypt(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 32).toString('hex');
-  return `scrypt$${salt}$${derived}`;
+  // SECURITY: Use recommended scrypt parameters (N=16384, r=8, p=1, dkLen=32)
+  const derived = crypto.scryptSync(password, salt, 32, {
+    N: 16384,
+    r: 8,
+    p: 1,
+  }).toString('hex');
+  return `scrypt$16384:8:1$${salt}$${derived}`;
 }
 
 export function verifyPasswordScrypt(password: string, storedHash: string): boolean {
   const parts = storedHash.split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
-  const [, salt, originalHex] = parts;
-  const derived = crypto.scryptSync(password, salt, 32);
+  if (parts.length !== 4 || parts[0] !== 'scrypt') return false;
+  const [, params, salt, originalHex] = parts;
+  const [nStr, rStr, pStr] = params.split(':');
+  const N = parseInt(nStr, 10) || 16384;
+  const r = parseInt(rStr, 10) || 8;
+  const p = parseInt(pStr, 10) || 1;
+  const derived = crypto.scryptSync(password, salt, 32, { N, r, p });
   const original = Buffer.from(originalHex, 'hex');
   if (derived.length !== original.length) return false;
   return crypto.timingSafeEqual(derived, original);
@@ -120,17 +129,22 @@ export function decryptSecret(cipherText: string): string {
   if (!ivHex || !tagHex || !dataHex) {
     throw new Error('Invalid encrypted credential format.');
   }
-  const decipher = crypto.createDecipheriv(
-    'aes-256-gcm',
-    MASTER_KEY,
-    Buffer.from(ivHex, 'hex')
-  );
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(dataHex, 'hex')),
-    decipher.final(),
-  ]);
-  return decrypted.toString('utf8');
+  try {
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      MASTER_KEY,
+      Buffer.from(ivHex, 'hex')
+    );
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(dataHex, 'hex')),
+      decipher.final(),
+    ]);
+    return decrypted.toString('utf8');
+  } catch (err: any) {
+    // SECURITY: Do not leak decryption details to caller
+    throw new Error('Failed to decrypt credential.');
+  }
 }
 
 export const DEFAULT_ADMIN_USERNAME =
@@ -256,7 +270,6 @@ export async function withDbRetry<T>(fn: () => Promise<T>, retries = 2): Promise
   let lastErr: any;
   for (let i = 0; i < retries; i++) {
     try {
-      await ensurePostgresReady();
       return await fn();
     } catch (err: any) {
       lastErr = err;

@@ -444,6 +444,9 @@ export function registerStorageBackupRoutes(app: express.Express) {
         }
       }
 
+      // Restoring data is an explicit maintenance operation; reconcile here rather
+      // than making the next ordinary navigation request repair the database.
+      await ensureWorkspaceBootstrap(true);
       res.json({ ok: true, message: 'Workspace database backup restored to PostgreSQL!' });
     })
   );

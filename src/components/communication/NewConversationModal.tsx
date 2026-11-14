@@ -43,7 +43,7 @@ export const NewConversationModal: React.FC<NewConversationModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs   duration-150"
       onClick={onClose}
     >
       <div
@@ -84,11 +84,7 @@ export const NewConversationModal: React.FC<NewConversationModalProps> = ({
 
         {/* Member Directory List */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 p-2">
-          {isLoading ? (
-            <div className="p-8 text-center text-slate-400 text-xs">
-              Loading workspace directory...
-            </div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-xs">
               No matching members found.
             </div>

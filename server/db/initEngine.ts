@@ -63,7 +63,9 @@ export const DEFAULT_TEAM_GROUPS = [
   },
 ];
 
-let lastInitTimestamp = 0;
+let initializedDatabaseKey: string | null = null;
+let initializationKey: string | null = null;
+let initializationInFlight: Promise<void> | null = null;
 
 function formatNowLabel(): string {
   return new Date().toLocaleDateString('en-US', {
@@ -346,12 +348,8 @@ export async function syncWorkspaceUsersToMembers(): Promise<void> {
   }
 }
 
-export async function initializeDatabaseEngine(force = false, rotateOnStartup = false): Promise<void> {
+async function runDatabaseInitialization(rotateOnStartup: boolean): Promise<void> {
   const now = Date.now();
-  if (!force && now - lastInitTimestamp < 15_000) {
-    return;
-  }
-  lastInitTimestamp = now;
 
   const nowLabel = formatNowLabel();
   const nowMs = BigInt(now);
@@ -471,6 +469,23 @@ export async function initializeDatabaseEngine(force = false, rotateOnStartup = 
 
   // 5. Synchronize Team Groups, Users, and Members
   await syncWorkspaceUsersToMembers();
+}
+
+// Bootstrap is a startup/configuration lifecycle, not recurring request maintenance.
+// Concurrent callers await the same work; failed attempts can be retried.
+export function initializeDatabaseEngine(force = false, rotateOnStartup = false): Promise<void> {
+  const databaseKey = process.env.DATABASE_URL?.trim() || 'staging-memory';
+  if (initializationInFlight && initializationKey === databaseKey) return initializationInFlight;
+  if (!force && initializedDatabaseKey === databaseKey) return Promise.resolve();
+
+  initializationKey = databaseKey;
+  const operation = runDatabaseInitialization(rotateOnStartup).then(() => {
+    initializedDatabaseKey = databaseKey;
+  });
+  initializationInFlight = operation;
+  return operation.finally(() => {
+    if (initializationInFlight === operation) initializationInFlight = null;
+  });
 }
 
 export const ensureWorkspaceBootstrap = initializeDatabaseEngine;

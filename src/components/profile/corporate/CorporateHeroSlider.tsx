@@ -125,7 +125,7 @@ export const CorporateHeroSlider: React.FC<CorporateHeroSliderProps> = ({
           {activeSlide.imageUrl ? (
             <motion.div
               key={activeSlide.id || currentIndex}
-              initial={{ opacity: 0, scale: 1.04 }}
+              initial={false}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.45, ease: 'easeOut' }}
@@ -135,7 +135,7 @@ export const CorporateHeroSlider: React.FC<CorporateHeroSliderProps> = ({
           ) : (
             <motion.div
               key={`grad-${activeSlide.id || currentIndex}`}
-              initial={{ opacity: 0 }}
+              initial={false}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950"
@@ -232,7 +232,7 @@ export const CorporateHeroSlider: React.FC<CorporateHeroSliderProps> = ({
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeSlide.id || currentIndex}
-                initial={{ opacity: 0, y: 12 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.28 }}

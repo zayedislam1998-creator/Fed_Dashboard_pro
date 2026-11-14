@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ClipboardList,
-  Plus,
-  Trash2,
-  Save,
-  Eye,
-  Edit3,
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-} from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Save, Eye, Edit3, CheckCircle2, ExternalLink } from 'lucide-react';
 import {
   WorkspaceFormItem,
   fetchWorkspaceForms,
@@ -75,11 +65,7 @@ export const FormEnginePane: React.FC<FormEnginePaneProps> = ({
   };
 
   if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-slate-100">
-        <Loader2 className="w-7 h-7 text-purple-600 animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   if (!form) {
@@ -131,7 +117,7 @@ export const FormEnginePane: React.FC<FormEnginePaneProps> = ({
                   className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  {saving ? 'Saving...' : 'Save Form'}
+                  {'Save Form'}
                 </button>
               )}
             </div>

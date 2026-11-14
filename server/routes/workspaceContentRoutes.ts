@@ -246,15 +246,11 @@ async function syncSlideDeckFileInTx(
   return savedFile;
 }
 
-export function registerWorkspaceContentRoutes(app: express.Express) {
-  // Enforce Admin boundaries on unscoped Admin module endpoints
-  // (Public form/invite links remain public; Member Dashboard uses scoped /api/member/* routes)
+// ============================================================================
+// SECTION: Forms & Public Submissions
+// ============================================================================
+function registerFormsRoutes(app: express.Express) {
   app.use('/api/forms', requireAuth, requireAdmin);
-  app.use('/api/docs', requireAuth, requireAdmin);
-  app.use('/api/slides', requireAuth, requireAdmin);
-  app.use('/api/meetings', requireAuth, requireAdmin);
-  app.use('/api/teams', requireAuth, requireAdmin);
-  app.use('/api/posts-notices', requireAuth, requireAdmin);
 
   // ============================================================================
   // FORMS & PUBLIC SUBMISSIONS
@@ -514,11 +510,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       });
     })
   );
+}
 
-  // ============================================================================
-  // WORKSPACE DOCS
-  // ============================================================================
-
+// ============================================================================
+// SECTION: Workspace Docs
+// ============================================================================
+function registerDocsRoutes(app: express.Express) {
+  app.use('/api/docs', requireAuth, requireAdmin);
   app.get(
     '/api/docs',
     asyncHandler(async (_req, res) => {
@@ -620,11 +618,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       res.json({ docs: docs.map(toWorkspaceDocDto), files: files.map(toWorkspaceFileDto) });
     })
   );
+}
 
-  // ============================================================================
-  // WORKSPACE SLIDES
-  // ============================================================================
-
+// ============================================================================
+// SECTION: Workspace Slides
+// ============================================================================
+function registerSlidesRoutes(app: express.Express) {
+  app.use('/api/slides', requireAuth, requireAdmin);
   app.get(
     '/api/slides',
     asyncHandler(async (_req, res) => {
@@ -782,11 +782,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       });
     })
   );
+}
 
-  // ============================================================================
-  // MEETINGS
-  // ============================================================================
-
+// ============================================================================
+// SECTION: Meetings
+// ============================================================================
+function registerMeetingsRoutes(app: express.Express) {
+  app.use('/api/meetings', requireAuth, requireAdmin);
   app.get(
     '/api/meetings',
     asyncHandler(async (_req, res) => {
@@ -874,11 +876,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       res.json({ meetings: all.map(toWorkspaceMeetingDto) });
     })
   );
+}
 
-  // ============================================================================
-  // TEAMS & MEMBERS
-  // ============================================================================
-
+// ============================================================================
+// SECTION: Teams & Members
+// ============================================================================
+function registerTeamsMembersRoutes(app: express.Express) {
+  app.use('/api/teams', requireAuth, requireAdmin);
   app.get(
     '/api/teams/members',
     asyncHandler(async (_req, res) => {
@@ -1044,7 +1048,8 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
             secure: targetServerAcc.smtpSecure,
             auth: { user: targetServerAcc.username, pass },
             connectionTimeout: 10000,
-            tls: { rejectUnauthorized: false },
+            // SECURITY: TLS certificate validation — defaults to true; set MAIL_TLS_STRICT=false to disable
+            tls: { rejectUnauthorized: process.env.MAIL_TLS_STRICT !== 'false' },
           });
 
           const subject = `Workspace Invitation: ${member.fullName} (${member.designation} — ${member.teamName || 'Team'})`;
@@ -1252,11 +1257,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       res.json({ ok: true, member: toWorkspaceMemberDto(updated) });
     })
   );
+}
 
-  // ============================================================================
-  // POSTS & NOTICES
-  // ============================================================================
-
+// ============================================================================
+// SECTION: Posts & Notices
+// ============================================================================
+function registerPostsNoticesRoutes(app: express.Express) {
+  app.use('/api/posts-notices', requireAuth, requireAdmin);
   app.get(
     '/api/posts-notices',
     asyncHandler(async (_req, res) => {
@@ -1522,10 +1529,13 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       res.json({ categories: categories.map(toWorkspacePostCategoryDto) });
     })
   );
+}
 
-  // ============================================================================
-  // ISOLATED EXECUTIVE RESUME BUILDER & CORPORATE WEBSITE STUDIO ENGINE
-  // ============================================================================
+// ============================================================================
+// SECTION: Executive Resume & Corporate Website Profiles
+// ============================================================================
+function registerProfilesRoutes(app: express.Express) {
+  app.use(requireAuth);
 
   async function resolveActiveUser(req: express.Request) {
     const currentUserId = req.auth?.user?.id;
@@ -2208,4 +2218,17 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
       res.json({ success: true, corporate: sanitized });
     })
   );
+}
+
+// ============================================================================
+// MAIN ORCHESTRATOR — registers all workspace content sub-routes
+// ============================================================================
+export function registerWorkspaceContentRoutes(app: express.Express) {
+  registerFormsRoutes(app);
+  registerDocsRoutes(app);
+  registerSlidesRoutes(app);
+  registerMeetingsRoutes(app);
+  registerTeamsMembersRoutes(app);
+  registerPostsNoticesRoutes(app);
+  registerProfilesRoutes(app);
 }

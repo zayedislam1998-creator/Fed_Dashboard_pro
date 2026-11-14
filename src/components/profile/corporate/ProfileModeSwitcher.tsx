@@ -62,7 +62,7 @@ export const ProfileModeSwitcher: React.FC<ProfileModeSwitcherProps> = ({
 }) => {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -8 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22 }}
       className="sticky top-0 z-30 w-full py-2.5 px-3 sm:px-8 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-2.5 print:hidden"
@@ -256,17 +256,13 @@ export const ProfileModeSwitcher: React.FC<ProfileModeSwitcherProps> = ({
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {isSaving ? (
-              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : isEditing ? (
+            {isEditing ? (
               <Check className="w-3.5 h-3.5" />
             ) : (
               <Edit3 className="w-3.5 h-3.5" />
             )}
             <span>
-              {isSaving
-                ? 'Saving...'
-                : isEditing
+              {isEditing
                   ? mode === 'PERSONAL'
                     ? 'Save Resume'
                     : 'Save Website'

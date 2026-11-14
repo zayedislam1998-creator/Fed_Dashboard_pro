@@ -1,24 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import {
-  ZoomIn,
-  ZoomOut,
-  RotateCw,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-  Search,
-  Scissors,
-  Save,
-  Type,
-  Image as ImageIcon,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  Edit3,
-  Eye,
-} from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, Trash2, ArrowUp, ArrowDown, Search, Scissors, Save, Type, Image as ImageIcon, ChevronLeft, ChevronRight, Edit3, Eye } from 'lucide-react';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -285,12 +268,7 @@ export const PdfEnginePane: React.FC<PdfEnginePaneProps> = ({
   };
 
   if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-slate-100">
-        <Loader2 className="w-8 h-8 text-rose-600 animate-spin" />
-        <p className="text-xs font-semibold text-slate-600">Rendering PDF pages via PDF.js Engine...</p>
-      </div>
-    );
+    return null;
   }
 
   if (error) {
@@ -470,7 +448,7 @@ export const PdfEnginePane: React.FC<PdfEnginePaneProps> = ({
               className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
-              {saving ? 'Saving...' : 'Save PDF'}
+              {'Save PDF'}
             </button>
           </div>
         </div>

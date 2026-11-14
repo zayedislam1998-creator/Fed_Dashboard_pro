@@ -7,6 +7,7 @@ export const StateMarker: React.FC<StateMarkerProps> = ({
   count,
   x,
   y,
+  users = [],
   isSelected = false,
   onClick,
   accentColor = '#0B57D0',
@@ -17,6 +18,20 @@ export const StateMarker: React.FC<StateMarkerProps> = ({
   // Pin dimensions
   const scale = isSelected ? 1.25 : isHovered ? 1.15 : 1;
   const pinColor = isSelected ? '#1E40AF' : accentColor;
+
+  const firstUser = users && users.length > 0 ? users[0] : null;
+  const hasExtraUsers = users && users.length > 1;
+  const userSubtitle = firstUser
+    ? `${firstUser.name}${firstUser.city ? ` (${firstUser.city})` : ''}${hasExtraUsers ? ` +${users.length - 1} more` : ''}`
+    : null;
+
+  const tooltipWidth = Math.max(
+    stateName.length * 8 + 40,
+    userSubtitle ? userSubtitle.length * 6 + 30 : 0,
+    96
+  );
+  const tooltipHeight = userSubtitle ? 32 : 22;
+  const tooltipY = userSubtitle ? -28 : -18;
 
   return (
     <g
@@ -85,10 +100,10 @@ export const StateMarker: React.FC<StateMarkerProps> = ({
         <g transform={`translate(0, ${isMulti ? -38 : -32})`} className="pointer-events-none">
           {/* Tooltip bubble */}
           <rect
-            x={-Math.max(stateName.length * 4 + 20, 48)}
-            y="-18"
-            width={Math.max(stateName.length * 8 + 40, 96)}
-            height="22"
+            x={-tooltipWidth / 2}
+            y={tooltipY}
+            width={tooltipWidth}
+            height={tooltipHeight}
             rx="6"
             fill="#0f172a"
             fillOpacity="0.95"
@@ -100,7 +115,7 @@ export const StateMarker: React.FC<StateMarkerProps> = ({
           {/* Tooltip text */}
           <text
             x="0"
-            y="-7"
+            y={userSubtitle ? -15 : -7}
             textAnchor="middle"
             fill="#ffffff"
             fontSize="9"
@@ -109,6 +124,19 @@ export const StateMarker: React.FC<StateMarkerProps> = ({
           >
             {stateName} ({stateCode}): {count} {count === 1 ? 'member' : 'members'}
           </text>
+          {userSubtitle && (
+            <text
+              x="0"
+              y="-3"
+              textAnchor="middle"
+              fill="#94a3b8"
+              fontSize="8"
+              fontWeight="500"
+              fontFamily="system-ui, -apple-system, sans-serif"
+            >
+              {userSubtitle}
+            </text>
+          )}
         </g>
       )}
     </g>

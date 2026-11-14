@@ -6,7 +6,6 @@ import {
   prisma,
   withDbRetry,
 } from '../db/prisma';
-import { ensureWorkspaceBootstrap } from '../db/initEngine';
 import {
   evaluateEffectiveCapabilities,
   type EvaluatedCapabilities,
@@ -169,18 +168,18 @@ export function extractSessionTokenFromRequest(req: express.Request): string | n
   if (cookies[SESSION_COOKIE_NAME]) {
     return cookies[SESSION_COOKIE_NAME];
   }
-  const queryToken = req.query?.ws_token;
-  if (typeof queryToken === 'string' && queryToken.trim().length > 16) {
-    return queryToken.trim();
-  }
+  // SECURITY: Removed query parameter token extraction (ws_token) to prevent
+  // token leakage in server logs, browser history, and referrer headers.
   return null;
 }
 
 async function buildAuthenticatedContext(
   user: any,
-  sessionId: string
+  sessionId: string,
+  includeStorageUsage: boolean
 ): Promise<AuthenticatedUserContext> {
-  const usedStorageBytes = await getUserUsedStorageBytes(user.id);
+  // Only session/profile initialization needs quota display data, not every API read.
+  const usedStorageBytes = includeStorageUsage ? await getUserUsedStorageBytes(user.id) : 0;
   const capabilities = evaluateEffectiveCapabilities(
     user,
     user.accessPolicy,
@@ -242,7 +241,7 @@ export async function resolveAuthFromRequest(
         })
         .catch(() => {});
     }
-    return buildAuthenticatedContext(session.user, session.id);
+    return buildAuthenticatedContext(session.user, session.id, (req.originalUrl || req.url || '').split('?')[0] === '/api/auth/session');
   }
 
   return null;
@@ -255,7 +254,6 @@ export async function attachAuthContext(
 ) {
   try {
     await withDbRetry(async () => {
-      await ensureWorkspaceBootstrap();
       req.auth = await resolveAuthFromRequest(req);
     });
     req.dbError = undefined;

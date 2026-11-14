@@ -127,7 +127,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
             disabled={isSaving}
             className="px-5 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
           >
-            {isSaving ? 'Saving...' : 'Save General Settings'}
+            {'Save General Settings'}
           </button>
         </div>
       </div>

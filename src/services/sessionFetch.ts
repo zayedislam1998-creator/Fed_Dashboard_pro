@@ -1,3 +1,5 @@
+import { clearNavigationCache, fetchNavigationData } from './navigationCache';
+
 export const SESSION_STORAGE_KEY = 'ws_session_token';
 
 const nativeFetch: typeof fetch =
@@ -9,6 +11,21 @@ const nativeFetch: typeof fetch =
 // Zero browser localStorage / sessionStorage caching.
 let inMemorySessionToken = '';
 let legacyStorageCleaned = false;
+let cacheChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined') {
+  // Removed window focus listener — clearing cache on focus causes thrashing when
+  // the user switches tabs and returns. Cache invalidation is handled by mutations
+  // and explicit calls to invalidateNavigationData().
+  try {
+    cacheChannel = new BroadcastChannel('workspace_navigation_invalidation');
+    cacheChannel.onmessage = () => clearNavigationCache();
+  } catch { /* Cross-tab messaging is optional. */ }
+}
+
+export function invalidateNavigationData(): void {
+  clearNavigationCache();
+  cacheChannel?.postMessage('invalidate');
+}
 
 function purgeLegacyBrowserCacheKeys(): void {
   if (legacyStorageCleaned || typeof window === 'undefined') return;
@@ -30,6 +47,7 @@ export function getStoredSessionToken(): string {
 
 export function setStoredSessionToken(token: string | null): void {
   purgeLegacyBrowserCacheKeys();
+  if (inMemorySessionToken !== (token?.trim() || '')) invalidateNavigationData();
   if (token && token.trim().length > 0) {
     inMemorySessionToken = token.trim();
   } else {
@@ -74,7 +92,22 @@ export async function wsFetch(
     };
   }
 
-  const response = await nativeFetch(input, nextInit);
+  const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  if (isLocalApi && method !== 'GET' && method !== 'HEAD') invalidateNavigationData();
+  const url = isLocalApi ? new URL(urlStr, window.location.origin) : null;
+
+  // Blacklist: paths that should NEVER be cached (auth, health checks, uploads, dynamic engine parsing)
+  const neverCache = url &&
+    /^\/api\/(?:auth\/|health$|db\/|uploads\/|engine\/file\/|geo\/|files\/[^/]+\/(versions|shares)$|files\/search$|files\/trash$|admin\/users\/[^/]+\/sessions$|admin\/preview-member\/|cmh\/public\/)/.test(url.pathname);
+
+  const cacheable = url && method === 'GET' && !(input instanceof Request) && !neverCache && url.pathname.startsWith('/api/');
+  const response = cacheable
+    ? await fetchNavigationData(url.pathname + url.search, () => nativeFetch(input, {
+      ...nextInit,
+      // Cancelling one view must not abort the shared request used by another view.
+      signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15_000) : undefined,
+    }), init?.cache === 'reload' || init?.cache === 'no-cache', nextInit?.signal)
+    : await nativeFetch(input, nextInit);
 
   if (isLocalApi) {
     const newToken = response.headers.get('X-Workspace-Session-Token');

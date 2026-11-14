@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -37,26 +37,26 @@ import {
 } from 'lucide-react';
 import { WorkspaceModule } from './types';
 import { CustomMailTab, ServerMailAccount } from '../../services/workspaceApi';
-import type { ServerMailFolder } from '../ServerMailView';
-import type { SettingsSubTab } from '../SettingsView';
-import type { CmhTasksSubTab } from '../CmhTasksView';
-import type { CmhProjectsSubTab } from '../CmhProjectsView';
-import type { CmhFormBuilderSubTab } from '../CmhFormBuilderView';
-import type { TeamsSubTab } from '../TeamsView';
-import type { PostsNoticesSubTab } from '../PostsNoticesView';
-import type { FileManagerSubTab } from '../FileManagerView';
-import type { DocsSubTab } from '../DocsView';
-import type { SlidesSubTab } from '../SlidesView';
-import type { FormsSubTab } from '../FormsView';
-import type { MeetSubTab } from '../MeetView';
-import type { SheetsSubTab } from '../SheetsView';
-import type { CalendarSubTab } from '../CalendarView';
-import type { FinanceSubTab } from '../FinanceView';
-import type { CrmSubTab } from '../CrmTicketsView';
-import type { HrSubTab } from '../HrManagementView';
-import type { ChatSubTab } from '../TeamChatView';
-import type { WikiSubTab } from '../WikiKnowledgeView';
-import type { AutomationSubTab } from '../AutomationEngineView';
+import type { ServerMailFolder } from '../mail/ServerMailView';
+import type { SettingsSubTab } from '../settings/SettingsView';
+import type { CmhTasksSubTab } from '../cmh/CmhTasksView';
+import type { CmhProjectsSubTab } from '../cmh/CmhProjectsView';
+import type { CmhFormBuilderSubTab } from '../cmh/CmhFormBuilderView';
+import type { TeamsSubTab } from '../team/TeamsView';
+import type { PostsNoticesSubTab } from '../posts/PostsNoticesView';
+import type { FileManagerSubTab } from '../filemanager/FileManagerView';
+import type { DocsSubTab } from '../docs/DocsView';
+import type { SlidesSubTab } from '../slides/SlidesView';
+import type { FormsSubTab } from '../forms/FormsView';
+import type { MeetSubTab } from '../meetings/MeetView';
+import type { SheetsSubTab } from '../sheets/SheetsView';
+import type { CalendarSubTab } from '../calendar/CalendarView';
+import type { FinanceSubTab } from '../finance/FinanceView';
+import type { CrmSubTab } from '../crm/CrmTicketsView';
+import type { HrSubTab } from '../hr/HrManagementView';
+import type { ChatSubTab } from '../team/TeamChatView';
+import type { WikiSubTab } from '../wiki/WikiKnowledgeView';
+import type { AutomationSubTab } from '../automation/AutomationEngineView';
 
 export interface NavigationContentProps {
   isMobile?: boolean;
@@ -437,7 +437,7 @@ export const NavigationContent: React.FC<NavigationContentProps> = ({
             {activeModule === 'server_mail' ? (
               <div className="space-y-0.5">
                 <div className="px-3.5 py-1 text-[11px] font-bold text-slate-400 truncate">
-                  Server Mail {activeServerAccount ? `· ${activeServerAccount.email}` : ''}
+                  Server Mail {activeServerAccount ? `Â· ${activeServerAccount.email}` : ''}
                 </div>
                 {SERVER_MAIL_FOLDERS.map((folder) => {
                   const Icon = folder.icon;
@@ -564,3 +564,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = (props) => {
     </aside>
   );
 };
+
+
+

@@ -230,7 +230,10 @@ async function storeUploadedBufferAsWorkspaceFile(params: {
   }
 }
 
-export function registerFileAndEngineRoutes(app: express.Express) {
+// ============================================================================
+// SECTION: File Manager Routes
+// ============================================================================
+function registerFileManagerRoutes(app: express.Express) {
   // ============================================================================
   // ADMIN SERVER FILE MANAGER ROUTES (/api/files/*)
   // ============================================================================
@@ -1013,7 +1016,12 @@ export function registerFileAndEngineRoutes(app: express.Express) {
       });
     })
   );
+}
 
+// ============================================================================
+// SECTION: Engine Conversion Routes
+// ============================================================================
+function registerEngineConversionRoutes(app: express.Express) {
   // ============================================================================
   // MILLISECOND UNIVERSAL ENGINE ROUTES (/api/engine/file/:id & /api/engine/convert)
   // Works for Admin AND authorized / shared Members!
@@ -1380,6 +1388,14 @@ export function registerFileAndEngineRoutes(app: express.Express) {
       res.json(await listActiveFilesAndFolders(q));
     })
   );
+}
+
+// ============================================================================
+// MAIN ORCHESTRATOR
+// ============================================================================
+export function registerFileAndEngineRoutes(app: express.Express) {
+  registerFileManagerRoutes(app);
+  registerEngineConversionRoutes(app);
 }
 
 // Re-export structural defaults check helper

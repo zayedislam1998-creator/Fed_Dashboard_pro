@@ -1,6 +1,7 @@
-import React, { lazy, Suspense } from 'react';
+﻿import React, { lazy, Suspense } from 'react';
 import { WorkspaceModule } from './types';
 import { WorkspaceAuthUser } from '../../services/workspaceAuth';
+import { ErrorBoundary } from '../../shared/ui';
 import { ConnectedGmailAccount, WorkspaceUser } from '../../services/auth';
 import {
   CustomMailTab,
@@ -9,98 +10,98 @@ import {
   WorkspaceFileItem,
   WorkspaceMemberItem,
 } from '../../services/workspaceApi';
-import type { ServerMailFolder } from '../ServerMailView';
-import type { SettingsSubTab } from '../SettingsView';
-import type { CmhTasksSubTab } from '../CmhTasksView';
-import type { CmhProjectsSubTab } from '../CmhProjectsView';
-import type { CmhFormBuilderSubTab } from '../CmhFormBuilderView';
-import type { TeamsSubTab } from '../TeamsView';
-import type { PostsNoticesSubTab } from '../PostsNoticesView';
-import type { FileManagerSubTab } from '../FileManagerView';
-import type { DocsSubTab } from '../DocsView';
-import type { SlidesSubTab } from '../SlidesView';
-import type { FormsSubTab } from '../FormsView';
-import type { MeetSubTab } from '../MeetView';
-import type { SheetsSubTab } from '../SheetsView';
-import type { CalendarSubTab } from '../CalendarView';
-import type { FinanceSubTab } from '../FinanceView';
-import type { CrmSubTab } from '../CrmTicketsView';
-import type { HrSubTab } from '../HrManagementView';
-import type { ChatSubTab } from '../TeamChatView';
-import type { WikiSubTab } from '../WikiKnowledgeView';
-import type { AutomationSubTab } from '../AutomationEngineView';
+import type { ServerMailFolder } from '../mail/ServerMailView';
+import type { SettingsSubTab } from '../settings/SettingsView';
+import type { CmhTasksSubTab } from '../cmh/CmhTasksView';
+import type { CmhProjectsSubTab } from '../cmh/CmhProjectsView';
+import type { CmhFormBuilderSubTab } from '../cmh/CmhFormBuilderView';
+import type { TeamsSubTab } from '../team/TeamsView';
+import type { PostsNoticesSubTab } from '../posts/PostsNoticesView';
+import type { FileManagerSubTab } from '../filemanager/FileManagerView';
+import type { DocsSubTab } from '../docs/DocsView';
+import type { SlidesSubTab } from '../slides/SlidesView';
+import type { FormsSubTab } from '../forms/FormsView';
+import type { MeetSubTab } from '../meetings/MeetView';
+import type { SheetsSubTab } from '../sheets/SheetsView';
+import type { CalendarSubTab } from '../calendar/CalendarView';
+import type { FinanceSubTab } from '../finance/FinanceView';
+import type { CrmSubTab } from '../crm/CrmTicketsView';
+import type { HrSubTab } from '../hr/HrManagementView';
+import type { ChatSubTab } from '../team/TeamChatView';
+import type { WikiSubTab } from '../wiki/WikiKnowledgeView';
+import type { AutomationSubTab } from '../automation/AutomationEngineView';
 
 const WorkspaceFeedView = lazy(() =>
-  import('../WorkspaceFeedView').then((m) => ({ default: m.WorkspaceFeedView }))
+  import('../feed/WorkspaceFeedView').then((m) => ({ default: m.WorkspaceFeedView }))
 );
 const OverviewDashboardView = lazy(() =>
-  import('../OverviewDashboardView').then((m) => ({ default: m.OverviewDashboardView }))
+  import('../dashboard/OverviewDashboardView').then((m) => ({ default: m.OverviewDashboardView }))
 );
 const GmailView = lazy(() =>
-  import('../GmailView').then((m) => ({ default: m.GmailView }))
+  import('../mail/GmailView').then((m) => ({ default: m.GmailView }))
 );
 const ServerMailView = lazy(() =>
-  import('../ServerMailView').then((m) => ({ default: m.ServerMailView }))
+  import('../mail/ServerMailView').then((m) => ({ default: m.ServerMailView }))
 );
 const BulkMailView = lazy(() =>
-  import('../BulkMailView').then((m) => ({ default: m.BulkMailView }))
+  import('../bulkmail/BulkMailView').then((m) => ({ default: m.BulkMailView }))
 );
 const DocsView = lazy(() =>
-  import('../DocsView').then((m) => ({ default: m.DocsView }))
+  import('../docs/DocsView').then((m) => ({ default: m.DocsView }))
 );
 const SlidesView = lazy(() =>
-  import('../SlidesView').then((m) => ({ default: m.SlidesView }))
+  import('../slides/SlidesView').then((m) => ({ default: m.SlidesView }))
 );
 const FormsView = lazy(() =>
-  import('../FormsView').then((m) => ({ default: m.FormsView }))
+  import('../forms/FormsView').then((m) => ({ default: m.FormsView }))
 );
 const MeetView = lazy(() =>
-  import('../MeetView').then((m) => ({ default: m.MeetView }))
+  import('../meetings/MeetView').then((m) => ({ default: m.MeetView }))
 );
 const TeamsView = lazy(() =>
-  import('../TeamsView').then((m) => ({ default: m.TeamsView }))
+  import('../team/TeamsView').then((m) => ({ default: m.TeamsView }))
 );
 const PostsNoticesView = lazy(() =>
-  import('../PostsNoticesView').then((m) => ({ default: m.PostsNoticesView }))
+  import('../posts/PostsNoticesView').then((m) => ({ default: m.PostsNoticesView }))
 );
 const FileManagerView = lazy(() =>
-  import('../FileManagerView').then((m) => ({ default: m.FileManagerView }))
+  import('../filemanager/FileManagerView').then((m) => ({ default: m.FileManagerView }))
 );
 const CmhTasksView = lazy(() =>
-  import('../CmhTasksView').then((m) => ({ default: m.CmhTasksView }))
+  import('../cmh/CmhTasksView').then((m) => ({ default: m.CmhTasksView }))
 );
 const CmhProjectsView = lazy(() =>
-  import('../CmhProjectsView').then((m) => ({ default: m.CmhProjectsView }))
+  import('../cmh/CmhProjectsView').then((m) => ({ default: m.CmhProjectsView }))
 );
 const CmhFormBuilderView = lazy(() =>
-  import('../CmhFormBuilderView').then((m) => ({ default: m.CmhFormBuilderView }))
+  import('../cmh/CmhFormBuilderView').then((m) => ({ default: m.CmhFormBuilderView }))
 );
 const SettingsView = lazy(() =>
-  import('../SettingsView').then((m) => ({ default: m.SettingsView }))
+  import('../settings/SettingsView').then((m) => ({ default: m.SettingsView }))
 );
 const SheetsView = lazy(() =>
-  import('../SheetsView').then((m) => ({ default: m.SheetsView }))
+  import('../sheets/SheetsView').then((m) => ({ default: m.SheetsView }))
 );
 const CalendarView = lazy(() =>
-  import('../CalendarView').then((m) => ({ default: m.CalendarView }))
+  import('../calendar/CalendarView').then((m) => ({ default: m.CalendarView }))
 );
 const FinanceView = lazy(() =>
-  import('../FinanceView').then((m) => ({ default: m.FinanceView }))
+  import('../finance/FinanceView').then((m) => ({ default: m.FinanceView }))
 );
 const CrmTicketsView = lazy(() =>
-  import('../CrmTicketsView').then((m) => ({ default: m.CrmTicketsView }))
+  import('../crm/CrmTicketsView').then((m) => ({ default: m.CrmTicketsView }))
 );
 const HrManagementView = lazy(() =>
-  import('../HrManagementView').then((m) => ({ default: m.HrManagementView }))
+  import('../hr/HrManagementView').then((m) => ({ default: m.HrManagementView }))
 );
 const TeamChatView = lazy(() =>
-  import('../TeamChatView').then((m) => ({ default: m.TeamChatView }))
+  import('../team/TeamChatView').then((m) => ({ default: m.TeamChatView }))
 );
 const WikiKnowledgeView = lazy(() =>
-  import('../WikiKnowledgeView').then((m) => ({ default: m.WikiKnowledgeView }))
+  import('../wiki/WikiKnowledgeView').then((m) => ({ default: m.WikiKnowledgeView }))
 );
 const AutomationEngineView = lazy(() =>
-  import('../AutomationEngineView').then((m) => ({ default: m.AutomationEngineView }))
+  import('../automation/AutomationEngineView').then((m) => ({ default: m.AutomationEngineView }))
 );
 const ExecutiveProfileView = lazy(() =>
   import('../profile/ExecutiveProfileView').then((m) => ({ default: m.ExecutiveProfileView }))
@@ -109,17 +110,10 @@ const CommunicationView = lazy(() =>
   import('../communication/CommunicationView').then((m) => ({ default: m.CommunicationView }))
 );
 const AdminPanelView = lazy(() =>
-  import('../AdminPanelView').then((m) => ({ default: m.AdminPanelView }))
+  import('../admin/AdminPanelView').then((m) => ({ default: m.AdminPanelView }))
 );
 
-const ModuleLoadingFallback: React.FC = () => (
-  <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500 animate-in fade-in duration-150">
-    <div className="flex items-center gap-2.5 text-xs font-semibold">
-      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      <span>Loading module...</span>
-    </div>
-  </div>
-);
+
 
 const feedModuleMap: Record<string, string> = {
   folders: 'files',
@@ -312,7 +306,8 @@ export const AppModuleRouter: React.FC<AppModuleRouterProps> = ({
 }) => {
   return (
     <main className="flex-1 min-w-0 min-h-0 pb-14 md:pb-3 md:pr-3 overflow-hidden flex flex-col">
-      <Suspense fallback={<ModuleLoadingFallback />}>
+      <ErrorBoundary>
+        <Suspense fallback={null}>
         {activeModule === 'main_feed' && (
           <WorkspaceFeedView
             onOpen={(source, id) => {
@@ -440,7 +435,7 @@ export const AppModuleRouter: React.FC<AppModuleRouterProps> = ({
                 teamMembers.map((m) => ({
                   email: m.email,
                   name: m.fullName,
-                  company: `${teamName} · ${m.designation}`,
+                  company: `${teamName} Â· ${m.designation}`,
                 }))
               );
               setActiveModule('bulk');
@@ -634,7 +629,11 @@ export const AppModuleRouter: React.FC<AppModuleRouterProps> = ({
             }}
           />
         )}
-      </Suspense>
+        </Suspense>
+      </ErrorBoundary>
     </main>
   );
 };
+
+
+
