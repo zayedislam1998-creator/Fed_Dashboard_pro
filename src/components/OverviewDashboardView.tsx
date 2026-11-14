@@ -471,7 +471,16 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
             </h1>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowAnalyticsModal(true)}
+              className="px-3 sm:px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+            >
+              <PieChartIcon className="w-3.5 h-3.5" />
+              <span>Open Analytics Mode →</span>
+            </button>
+
             <button
               type="button"
               onClick={() => onNavigateModule('cmh_tasks', 'create_task')}
@@ -774,74 +783,53 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
         </div>
 
         {/* =====================================================================
-            SECTION 2: INTERACTIVE DUAL-CIRCLE SUBMISSION TRACKER
-            Red Circle = Total Target (e.g., 40 People)
-            Second Circle = Submitted vs Remaining (Filled vs Pending)
-            Click any card/circle -> Opens Modal showing Who Submitted & What They Submitted
+            GEOGRAPHIC INTELLIGENCE: 50-STATE INTERACTIVE US MEMBER DISTRIBUTION MAP
+            Featured prominently on the Executive Dashboard (fits inside the primary viewport)
             ===================================================================== */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-3.5 sm:p-5 shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-rose-500" />
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
-                  Target vs Submitted Circle Tracker
-                </h2>
+        <StateDistributionCard />
+
+        {/* If tasks, projects, or forms exist, display the submission tracker below the map */}
+        {filteredItems.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-3.5 sm:p-5 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-rose-500" />
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                    Target vs Submitted Circle Tracker
+                  </h2>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Red Circle = Total Target People · Green/Amber Circle = Submitted vs Remaining (Click any item to inspect submissions)
+                </p>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Red Circle = Total Target People · Green/Amber Circle = Submitted vs Remaining (Click any item to inspect submissions)
-              </p>
-            </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start sm:self-auto">
-              {(
-                [
-                  { id: 'ALL', label: 'All Items' },
-                  { id: 'TASK', label: 'Tasks' },
-                  { id: 'PROJECT', label: 'Projects' },
-                  { id: 'FORM', label: 'Forms' },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setCategoryFilter(tab.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                    categoryFilter === tab.id
-                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredItems.length === 0 ? (
-            <div className="py-10 text-center space-y-3">
-              <p className="text-xs font-semibold text-slate-500">
-                No items found. Create a new task or project to track submissions.
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigateModule('cmh_tasks', 'create_task')}
-                  className="px-3.5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold"
-                >
-                  + Create Task
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigateModule('cmh_projects', 'create_project')}
-                  className="px-3.5 py-2 rounded-xl bg-purple-600 text-white text-xs font-bold"
-                >
-                  + Create Project
-                </button>
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start sm:self-auto">
+                {(
+                  [
+                    { id: 'ALL', label: 'All Items' },
+                    { id: 'TASK', label: 'Tasks' },
+                    { id: 'PROJECT', label: 'Projects' },
+                    { id: 'FORM', label: 'Forms' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(tab.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                      categoryFilter === tab.id
+                        ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : (
+
             <div className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {(showAllTracker ? filteredItems : filteredItems.slice(0, 4)).map((item) => {
@@ -1002,32 +990,8 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
               </div>
             )}
           </div>
-        )}
         </div>
-
-        {/* =====================================================================
-            COMPACT EXECUTIVE ANALYTICS BANNER (Keeps Home Page Clean & Super-Fast)
-            ===================================================================== */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-              <PieChartIcon className="w-5 h-5 text-indigo-300" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold tracking-tight">Executive Pie Charts & Fill Velocity</h3>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Submission ratios ({overallSubmissionTotal}/{overallTargetTotal} Filled), status distribution & velocity graphs
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowAnalyticsModal(true)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer self-start sm:self-auto"
-          >
-            Open Analytics Mode →
-          </button>
-        </div>
+      )}
       </div>
 
       {/* =======================================================================
@@ -1226,9 +1190,6 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Geographic Footprint: 50-State Interactive US Member Distribution Map */}
-              <StateDistributionCard className="mt-6" />
             </div>
           </div>
         </div>
