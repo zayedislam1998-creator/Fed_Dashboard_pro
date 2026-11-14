@@ -29,6 +29,8 @@ export interface ConnectedGmailAccount {
   clientId?: string;
   passwordHashPreview?: string;
   lastVerifiedAt?: string;
+  role?: string;
+  isSystemPrimary?: boolean;
 }
 
 export interface WorkspaceAuthState {

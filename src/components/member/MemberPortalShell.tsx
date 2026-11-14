@@ -1,3 +1,4 @@
+import { WorkspaceFeedView } from '../WorkspaceFeedView';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -162,12 +163,8 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
     }
     loadBootstrap();
     const unsubscribe = subscribeWorkspaceEvents((eventName) => {
-      if (
-        eventName === 'members:updated' ||
-        eventName === 'cmh:updated' ||
-        eventName === 'auth:permissions_updated' ||
-        eventName === 'workspace:updated'
-      ) {
+      // Avoid auto background reload jitter; only refresh session if permissions are directly revoked/granted
+      if (eventName === 'auth:permissions_updated') {
         loadBootstrap();
       }
     });
@@ -180,8 +177,8 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
   const effectiveUser = data?.user || user;
 
   const allowedApps = useMemo(
-    () => MODULE_APP_CATALOG.filter((m) => effectiveCaps.allowedModules.includes(m.id)),
-    [effectiveCaps.allowedModules]
+    () => MODULE_APP_CATALOG.filter((m) => (m.id === 'main_feed' && !readOnlyPreview) || effectiveCaps.allowedModules.includes(m.id)),
+    [effectiveCaps.allowedModules, readOnlyPreview]
   );
 
   const workspaceMenuApps = useMemo(
@@ -194,7 +191,7 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
   );
 
   const bottomMobileApps = useMemo(() => {
-    const order = ['overview', 'posts', 'cmh_projects', 'cmh_tasks', 'chat', 'files'];
+    const order = ['main_feed', 'overview', 'posts', 'cmh_projects', 'cmh_tasks', 'chat', 'files'];
     const sorted = [...allowedApps].sort(
       (a, b) =>
         (order.indexOf(a.id) === -1 ? 99 : order.indexOf(a.id)) -
@@ -414,6 +411,13 @@ export const MemberPortalShell: React.FC<MemberPortalShellProps> = ({
       );
     }
 
+    if (activeModule === 'main_feed' && !readOnlyPreview) {
+      return <WorkspaceFeedView onOpen={(source, id) => {
+        const module = ({ folders: 'files', members: 'teams', team_groups: 'teams', resume: 'profile', corporate: 'profile' } as Record<string, string>)[source] || source;
+        if (module === 'cmh_tasks') setSelectedTaskId(id);
+        openModule(module);
+      }} />;
+    }
     if (!effectiveCaps.allowedModules.includes(activeModule)) {
       return <MemberRestrictedNotice moduleName={currentHeaderMeta.label} />;
     }

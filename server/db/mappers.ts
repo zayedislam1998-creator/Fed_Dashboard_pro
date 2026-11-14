@@ -349,6 +349,7 @@ export function toNotificationDto(row: SystemNotification) {
 }
 
 export function toCmhFormDto(row: CmhFormTemplate) {
+  const rawSubs = Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [];
   return {
     id: row.id,
     title: row.title,
@@ -360,7 +361,8 @@ export function toCmhFormDto(row: CmhFormTemplate) {
     submitButtonLabel: row.submitButtonLabel,
     confirmationMessage: row.confirmationMessage || '',
     fields: Array.isArray(row.fieldsJson) ? (row.fieldsJson as any[]) : [],
-    submissions: Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [],
+    submissionsCount: rawSubs.length,
+    submissions: rawSubs,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     timestamp: Number(row.timestampMs),
@@ -368,6 +370,7 @@ export function toCmhFormDto(row: CmhFormTemplate) {
 }
 
 export function toCmhTaskDto(row: CmhTask) {
+  const rawSubs = Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [];
   return {
     id: row.id,
     title: row.title,
@@ -384,7 +387,8 @@ export function toCmhTaskDto(row: CmhTask) {
       row.customFieldValuesJson && typeof row.customFieldValuesJson === 'object'
         ? (row.customFieldValuesJson as Record<string, any>)
         : {},
-    submissions: Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [],
+    submissionsCount: rawSubs.length,
+    submissions: rawSubs,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     timestamp: Number(row.timestampMs),
@@ -392,6 +396,7 @@ export function toCmhTaskDto(row: CmhTask) {
 }
 
 export function toCmhProjectDto(row: CmhProject) {
+  const rawSubs = Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [];
   return {
     id: row.id,
     title: row.title,
@@ -409,7 +414,8 @@ export function toCmhProjectDto(row: CmhProject) {
       row.customFieldValuesJson && typeof row.customFieldValuesJson === 'object'
         ? (row.customFieldValuesJson as Record<string, any>)
         : {},
-    submissions: Array.isArray(row.submissionsJson) ? (row.submissionsJson as any[]) : [],
+    submissionsCount: rawSubs.length,
+    submissions: rawSubs,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     timestamp: Number(row.timestampMs),

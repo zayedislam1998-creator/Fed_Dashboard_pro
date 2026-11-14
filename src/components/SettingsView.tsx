@@ -1,30 +1,33 @@
+import { WorkspaceMailSettings } from './settings/WorkspaceMailSettings';
+import { FeedPreferences } from './WorkspaceFeedView';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Settings,
+  Sliders,
   Mail,
   Server,
   KeyRound,
   ShieldCheck,
-  Database,
-  Sliders,
+  HardDrive,
   Plus,
   Trash2,
   Edit3,
   Check,
   CheckCircle2,
   AlertCircle,
-  RefreshCw,
   Download,
   Upload,
-  Copy,
-  Lock,
+  Sparkles,
   Globe,
   BellRing,
   Layers,
-  Sparkles,
-  ExternalLink,
-  Webhook,
-  HardDrive,
+  X,
+  Bot,
+  ShieldAlert,
+  Send,
+  RefreshCw,
+  Database,
+  Search,
+  Table,
 } from 'lucide-react';
 import {
   ConnectedGmailAccount,
@@ -38,10 +41,7 @@ import {
   ServerMailVerifyResult,
   CustomMailTab,
   WorkspaceSystemSettingsClient,
-  WorkspaceSystemStats,
   CmhNotificationRules,
-  PostgresConfigClient,
-  ExternalIntegrationClient,
   VpsStorageDiagnosticsClient,
   verifyServerMailConnection,
   saveServerMailAccount,
@@ -50,19 +50,21 @@ import {
   deleteCustomMailTab,
   fetchSystemSettings,
   saveSystemSettings,
-  addExternalIntegration,
-  deleteExternalIntegration,
-  fetchDatabaseConfig,
-  saveDatabaseConfig,
   fetchVpsStorageDiagnostics,
   runVpsStorageCleanup,
   formatBytes,
   exportWorkspaceBackupJson,
   restoreWorkspaceBackupJson,
+  fetchPostgresCatalog,
+  fetchDatabaseConfig,
+  saveDatabaseConfig,
+  type PostgresCatalogInfo,
+  type PostgresCatalogTable,
+  type PostgresConfigClient,
 } from '../services/workspaceApi';
 
-export type SettingsSubTab = 'accounts' | 'general' | 'mail_rules' | 'database' | 'security';
-export type AccountSetupType = 'gmail' | 'server_mail' | 'smtp_relay' | 'api_webhook';
+export type SettingsSubTab = 'general' | 'accounts' | 'mail_rules' | 'database' | 'security' | 'feed';
+export type AccountSetupType = 'gmail' | 'server_mail';
 
 interface SettingsViewProps {
   activeSubTab: SettingsSubTab;
@@ -78,6 +80,7 @@ interface SettingsViewProps {
   onCustomTabsChanged: (tabs: CustomMailTab[]) => void;
   onOpenModule: (module: 'gmail' | 'server_mail' | 'bulk') => void;
   onWorkspaceNameChanged?: (name: string) => void;
+  onOpenAccessSettings: () => void;
 }
 
 const SMTP_RELAY_PRESETS = [
@@ -118,6 +121,7 @@ const SMTP_RELAY_PRESETS = [
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeSubTab,
   onSelectSubTab,
+  onOpenAccessSettings,
   gmailAccounts,
   activeGmailEmail,
   onGmailAccountsChanged,
@@ -130,15 +134,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenModule,
   onWorkspaceNameChanged,
 }) => {
-  const [accountType, setAccountType] = useState<AccountSetupType>('gmail');
-  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null
-  );
+  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToastMsg({ type, text });
-    setTimeout(() => setToastMsg(null), 4500);
+    setTimeout(() => setToastMsg(null), 4000);
   };
+
+  // Modal / Drawer state for adding or editing an email account
+  const [showAccountModal, setShowAccountModal] = useState<boolean>(false);
+  const [accountType, setAccountType] = useState<AccountSetupType>('gmail');
 
   // ============================================================================
   // 1. GMAIL ACCOUNT FORM STATE
@@ -146,9 +151,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [gmailEditingId, setGmailEditingId] = useState<string | undefined>(undefined);
   const [gmailLabel, setGmailLabel] = useState<string>('');
   const [gmailEmail, setGmailEmail] = useState<string>('');
-  const [gmailAuthMode, setGmailAuthMode] = useState<'app_password' | 'oauth_secret'>(
-    'app_password'
-  );
+  const [gmailAuthMode, setGmailAuthMode] = useState<'app_password' | 'oauth_secret'>('app_password');
   const [gmailPassword, setGmailPassword] = useState<string>('');
   const [gmailClientId, setGmailClientId] = useState<string>('');
   const [gmailClientSecret, setGmailClientSecret] = useState<string>('');
@@ -159,10 +162,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [gmailSmtpPort, setGmailSmtpPort] = useState<number>(465);
   const [isVerifyingGmail, setIsVerifyingGmail] = useState<boolean>(false);
   const [isSavingGmail, setIsSavingGmail] = useState<boolean>(false);
-  const [gmailVerifyResult, setGmailVerifyResult] = useState<ServerMailVerifyResult | null>(null);
+  const [gmailVerifyResult, setGmailVerifyResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // ============================================================================
-  // 2. SERVER MAIL / SMTP RELAY FORM STATE
+  // 2. SERVER MAIL FORM STATE
   // ============================================================================
   const [serverEditingId, setServerEditingId] = useState<string | undefined>(undefined);
   const [serverLabel, setServerLabel] = useState<string>('');
@@ -177,139 +180,77 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [serverSmtpSecure, setServerSmtpSecure] = useState<boolean>(true);
   const [isVerifyingServer, setIsVerifyingServer] = useState<boolean>(false);
   const [isSavingServer, setIsSavingServer] = useState<boolean>(false);
-  const [serverVerifyResult, setServerVerifyResult] = useState<ServerMailVerifyResult | null>(
-    null
-  );
+  const [serverVerifyResult, setServerVerifyResult] = useState<ServerMailVerifyResult | null>(null);
 
   // ============================================================================
-  // 3. EXTERNAL API / WEBHOOK CONNECTOR FORM STATE
-  // ============================================================================
-  const [extType, setExtType] = useState<ExternalIntegrationClient['providerType']>('CUSTOM_API');
-  const [extLabel, setExtLabel] = useState<string>('');
-  const [extEndpoint, setExtEndpoint] = useState<string>('');
-  const [extClientId, setExtClientId] = useState<string>('');
-  const [extSecretKey, setExtSecretKey] = useState<string>('');
-  const [isSavingExt, setIsSavingExt] = useState<boolean>(false);
-
-  // ============================================================================
-  // 4. SYSTEM SETTINGS, MAIL RULES & DATABASE CONFIG STATE
+  // 3. SYSTEM SETTINGS & RULES
   // ============================================================================
   const [sysSettings, setSysSettings] = useState<WorkspaceSystemSettingsClient>({
     workspaceName: 'Workspace Pro',
-    organizationName: '',
-    adminEmail: '',
+    organizationName: 'Primary Org',
+    adminEmail: 'zayed.islam1998@gmail.com',
     timezone: 'Asia/Dhaka',
-    dateFormat: 'MMM DD, YYYY',
-    defaultLandingModule: 'gmail',
-    autoSyncIntervalSec: 15,
+    dateFormat: 'MMM D, YYYY',
+    defaultLandingModule: 'overview',
+    autoSyncIntervalSec: 60,
     densityMode: 'comfortable',
-    defaultSignatureHtml: '',
     defaultReplyTo: '',
-    bulkDelayMs: 400,
+    bulkDelayMs: 2500,
     dailySendLimit: 500,
-    enableReadReceipts: false,
+    enableReadReceipts: true,
+    defaultSignatureHtml: '',
     autoSaveAttachmentsToFiles: true,
-    enablePublicForms: true,
-    enablePublicCmhPortal: true,
     incomingWebhookSecret: '',
     outgoingWebhookUrl: '',
+    enablePublicForms: true,
+    enablePublicCmhPortal: true,
     externalIntegrations: [],
     updatedAt: '',
   });
+
   const [cmhRules, setCmhRules] = useState<CmhNotificationRules>({
     id: 'cmh-rules-default',
-    adminEmail: '',
+    adminEmail: 'zayed.islam1998@gmail.com',
     notifyOnFormSubmit: true,
     notifyOnTaskActivity: true,
     notifyOnProjectActivity: true,
     notifyOnMemberActivity: true,
-    autoSendAdminEmail: false,
-    injectIntoPrimaryInbox: true,
+    autoSendAdminEmail: true,
+    injectIntoPrimaryInbox: false,
     updatedAt: '',
   });
-  const [sysStats, setSysStats] = useState<WorkspaceSystemStats>({
-    gmailAccounts: 0,
-    serverAccounts: 0,
-    messages: 0,
-    docs: 0,
-    slides: 0,
-    forms: 0,
-    meetings: 0,
-    members: 0,
-    tasks: 0,
-    projects: 0,
-    files: 0,
-  });
+
   const [isSavingSys, setIsSavingSys] = useState<boolean>(false);
 
-  // Custom Mail Tab Form inside Mail Rules
+  // ============================================================================
+  // 4. STORAGE & BACKUP STATE
+  // ============================================================================
+  const [vpsDiag, setVpsDiag] = useState<VpsStorageDiagnosticsClient | null>(null);
+  const [isCleaningStorage, setIsCleaningStorage] = useState<boolean>(false);
   const [newTabName, setNewTabName] = useState<string>('');
   const [newTabQuery, setNewTabQuery] = useState<string>('');
-
-  const [embeddedInfo, setEmbeddedInfo] = useState<{
-    mode?: string;
-    port?: number;
-    dbPath?: string;
-    walPath?: string;
-    sizeBytes?: number;
-    walSizeBytes?: number;
-    journalMode?: string;
-  } | null>(null);
-  const [pgConfig, setPgConfig] = useState<PostgresConfigClient>({
-    enabled: false,
-    connectionString: '',
-    host: 'localhost',
-    port: 5432,
-    database: 'workspace_pro',
-    user: 'postgres',
-    ssl: false,
-    autoMigrateOnStartup: true,
-  });
-  const [pgPassword, setPgPassword] = useState<string>('');
-  const [prismaSchemaText, setPrismaSchemaText] = useState<string>('');
-  const [sqlSchemaText, setSqlSchemaText] = useState<string>('');
-  const [schemaViewMode, setSchemaViewMode] = useState<'prisma' | 'sql'>('prisma');
-  const [isSavingPg, setIsSavingPg] = useState<boolean>(false);
-  const [pgMigrationFeedback, setPgMigrationFeedback] = useState<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
-  const [copiedSchema, setCopiedSchema] = useState<boolean>(false);
-  const [vpsStorage, setVpsStorage] = useState<VpsStorageDiagnosticsClient | null>(null);
-  const [isCleaningStorage, setIsCleaningStorage] = useState<boolean>(false);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadAllSettingsData = async () => {
-    try {
-      const [sysRes, dbRes, storageRes] = await Promise.all([
-        fetchSystemSettings(),
-        fetchDatabaseConfig(),
-        fetchVpsStorageDiagnostics().catch(() => null),
-      ]);
-      setSysSettings(sysRes.settings);
-      setCmhRules(sysRes.cmhRules);
-      setSysStats(sysRes.stats);
-      setPgConfig(dbRes.config);
-      if ((dbRes as any).embedded) {
-        setEmbeddedInfo((dbRes as any).embedded);
-      }
-      setPrismaSchemaText(dbRes.prismaSchema || '');
-      setSqlSchemaText(dbRes.schemaSql || '');
-      if (storageRes) {
-        setVpsStorage(storageRes);
-      }
-    } catch {
-      // ignore initial load error
-    }
-  };
+  // PostgreSQL Connection & Live Catalog State
+  const [dbSubTab, setDbSubTab] = useState<'url' | 'credentials' | 'info'>('info');
+  const [catalogInfo, setCatalogInfo] = useState<PostgresCatalogInfo | null>(null);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState<boolean>(false);
+  const [catalogLastLoaded, setCatalogLastLoaded] = useState<string>('');
+  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
+  const [nonEmptyOnly, setNonEmptyOnly] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadAllSettingsData();
-  }, []);
+  // DB Config Form & Save State
+  const [dbConfig, setDbConfig] = useState<PostgresConfigClient | null>(null);
+  const [isSavingDbConfig, setIsSavingDbConfig] = useState<boolean>(false);
+  const [rawConnectionUrl, setRawConnectionUrl] = useState<string>('');
+  const [pgHost, setPgHost] = useState<string>('');
+  const [pgPort, setPgPort] = useState<number>(5432);
+  const [pgDatabase, setPgDatabase] = useState<string>('');
+  const [pgUser, setPgUser] = useState<string>('');
+  const [pgPassword, setPgPassword] = useState<string>('');
+  const [pgSsl, setPgSsl] = useState<boolean>(true);
+  const [autoMigrate, setAutoMigrate] = useState<boolean>(true);
 
-  // ============================================================================
-  // GMAIL ACCOUNT HANDLERS
-  // ============================================================================
   const resetGmailForm = () => {
     setGmailEditingId(undefined);
     setGmailLabel('');
@@ -323,113 +264,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setGmailSmtpHost('smtp.gmail.com');
     setGmailSmtpPort(465);
     setGmailVerifyResult(null);
-  };
-
-  const handleEditGmailAccount = (acc: ConnectedGmailAccount) => {
-    setAccountType('gmail');
-    setGmailEditingId(acc.id);
-    setGmailLabel(acc.displayName);
-    setGmailEmail(acc.email);
-    setGmailAuthMode(acc.authMode || 'app_password');
-    setGmailClientId(acc.clientId || '');
-    setGmailPassword('');
-    setGmailImapHost(acc.imapHost || 'imap.gmail.com');
-    setGmailImapPort(acc.imapPort || 993);
-    setGmailSmtpHost(acc.smtpHost || 'smtp.gmail.com');
-    setGmailSmtpPort(acc.smtpPort || 465);
-    setGmailVerifyResult(null);
-  };
-
-  const handleTestGmail = async (targetAcc?: ConnectedGmailAccount) => {
-    setIsVerifyingGmail(true);
-    setGmailVerifyResult(null);
-    try {
-      const res = await verifyGmailConnectionOnServer(
-        targetAcc
-          ? {
-              accountId: targetAcc.id,
-              email: targetAcc.email,
-              username: targetAcc.email,
-              imapHost: targetAcc.imapHost || 'imap.gmail.com',
-              imapPort: targetAcc.imapPort || 993,
-              imapSecure: true,
-              smtpHost: targetAcc.smtpHost || 'smtp.gmail.com',
-              smtpPort: targetAcc.smtpPort || 465,
-              smtpSecure: true,
-            }
-          : {
-              accountId: gmailEditingId,
-              email: gmailEmail.trim(),
-              username: gmailEmail.trim(),
-              password: gmailPassword.trim(),
-              imapHost: gmailImapHost.trim() || 'imap.gmail.com',
-              imapPort: Number(gmailImapPort) || 993,
-              imapSecure: true,
-              smtpHost: gmailSmtpHost.trim() || 'smtp.gmail.com',
-              smtpPort: Number(gmailSmtpPort) || 465,
-              smtpSecure: true,
-            }
-      );
-      setGmailVerifyResult(res);
-    } catch (err: any) {
-      showToast('error', err?.message || 'Gmail connection test failed.');
-    } finally {
-      setIsVerifyingGmail(false);
-    }
-  };
-
-  const handleSaveGmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!gmailEmail.trim()) {
-      showToast('error', 'Please enter a valid Gmail address.');
-      return;
-    }
-    setIsSavingGmail(true);
-    try {
-      const { account, accounts } = await saveGmailAccountOnServer({
-        id: gmailEditingId,
-        label: gmailLabel.trim() || gmailEmail.split('@')[0],
-        email: gmailEmail.trim(),
-        username: gmailEmail.trim(),
-        password: gmailPassword.trim() || undefined,
-        authMode: gmailAuthMode,
-        clientId: gmailClientId.trim() || undefined,
-        clientSecret: gmailClientSecret.trim() || undefined,
-        refreshToken: gmailRefreshToken.trim() || undefined,
-        imapHost: gmailImapHost.trim() || 'imap.gmail.com',
-        imapPort: Number(gmailImapPort) || 993,
-        imapSecure: true,
-        smtpHost: gmailSmtpHost.trim() || 'smtp.gmail.com',
-        smtpPort: Number(gmailSmtpPort) || 465,
-        smtpSecure: true,
-      });
-      onGmailAccountsChanged(accounts, account.email);
-      showToast('success', `Gmail account "${account.email}" saved & encrypted in database!`);
-      resetGmailForm();
-    } catch (err: any) {
-      showToast('error', err?.message || 'Failed to save Gmail account.');
-    } finally {
-      setIsSavingGmail(false);
-    }
-  };
-
-  // ============================================================================
-  // SERVER MAIL / SMTP RELAY HANDLERS
-  // ============================================================================
-  const handleServerEmailChange = (val: string) => {
-    setServerEmail(val);
-    if (!serverUsername || serverUsername === serverEmail) {
-      setServerUsername(val);
-    }
-    const domain = val.split('@')[1];
-    if (domain && domain.includes('.') && !serverEditingId && accountType === 'server_mail') {
-      if (!serverImapHost || serverImapHost.startsWith('mail.')) {
-        setServerImapHost(`mail.${domain}`);
-      }
-      if (!serverSmtpHost || serverSmtpHost.startsWith('mail.')) {
-        setServerSmtpHost(`mail.${domain}`);
-      }
-    }
   };
 
   const resetServerForm = () => {
@@ -447,70 +281,275 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setServerVerifyResult(null);
   };
 
-  const handleEditServerAccount = (acc: ServerMailAccount) => {
-    setAccountType('server_mail');
-    setServerEditingId(acc.id);
-    setServerLabel(acc.label);
-    setServerEmail(acc.email);
-    setServerUsername(acc.username);
-    setServerPassword('');
-    setServerImapHost(acc.imapHost);
-    setServerImapPort(acc.imapPort);
-    setServerImapSecure(acc.imapSecure);
-    setServerSmtpHost(acc.smtpHost);
-    setServerSmtpPort(acc.smtpPort);
-    setServerSmtpSecure(acc.smtpSecure);
-    setServerVerifyResult(null);
-  };
-
-  const handleTestServerMail = async (targetAcc?: ServerMailAccount) => {
-    setIsVerifyingServer(true);
-    setServerVerifyResult(null);
+  const loadAllSettingsData = async () => {
     try {
-      const res = await verifyServerMailConnection(
-        targetAcc
-          ? {
-              accountId: targetAcc.id,
-              email: targetAcc.email,
-              username: targetAcc.username,
-              imapHost: targetAcc.imapHost,
-              imapPort: targetAcc.imapPort,
-              imapSecure: targetAcc.imapSecure,
-              smtpHost: targetAcc.smtpHost,
-              smtpPort: targetAcc.smtpPort,
-              smtpSecure: targetAcc.smtpSecure,
-            }
-          : {
-              accountId: serverEditingId,
-              email: serverEmail.trim(),
-              username: (serverUsername || serverEmail).trim(),
-              password: serverPassword,
-              imapHost: serverImapHost.trim(),
-              imapPort: Number(serverImapPort) || 993,
-              imapSecure: serverImapSecure,
-              smtpHost: serverSmtpHost.trim(),
-              smtpPort: Number(serverSmtpPort) || 465,
-              smtpSecure: serverSmtpSecure,
-            }
-      );
-      setServerVerifyResult(res);
-    } catch (err: any) {
-      showToast('error', err?.message || 'Server Mail connection test failed.');
-    } finally {
-      setIsVerifyingServer(false);
+      const [sysRes, vpsRes] = await Promise.all([
+        fetchSystemSettings().catch(() => null),
+        fetchVpsStorageDiagnostics().catch(() => null),
+      ]);
+      if (sysRes) {
+        setSysSettings(sysRes.settings);
+        if (sysRes.cmhRules) setCmhRules(sysRes.cmhRules);
+      }
+      if (vpsRes) {
+        setVpsDiag(vpsRes);
+      }
+    } catch {
+      // Quiet fail on initial load
     }
   };
 
-  const handleSaveServerMail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingServer(true);
+  useEffect(() => {
+    loadAllSettingsData();
+  }, []);
+
+  // ============================================================================
+  // SYSTEM MAIL & MAILBOX OVERVIEW STATE & HANDLERS
+  // ============================================================================
+  const [mailboxesOverview, setMailboxesOverview] = useState<{
+    totalCount: number;
+    systemCount: number;
+    generalCount: number;
+    adminRecipient: string;
+    primarySystemMail: {
+      id: string;
+      type: 'server_mail' | 'gmail';
+      email: string;
+      label: string;
+      host: string;
+      isVerified: boolean;
+    } | null;
+    mailboxes: Array<{
+      id: string;
+      type: 'server_mail' | 'gmail';
+      label: string;
+      email: string;
+      role: string;
+      isSystemPrimary: boolean;
+      lastVerifiedAt?: string | null;
+      host: string;
+    }>;
+  } | null>(null);
+
+  const [testingActiveSystemMail, setTestingActiveSystemMail] = useState(false);
+  const [activeSystemMailTestResult, setActiveSystemMailTestResult] = useState<{
+    ok: boolean;
+    message: string;
+    host?: string;
+  } | null>(null);
+
+  // Add System Mail Modal State
+  const [showAddSystemMailModal, setShowAddSystemMailModal] = useState(false);
+  const [sysType, setSysType] = useState<'server_mail' | 'gmail'>('server_mail');
+  const [sysEmail, setSysEmail] = useState('');
+  const [sysLabel, setSysLabel] = useState('');
+  const [sysPassword, setSysPassword] = useState('');
+  const [sysSmtpHost, setSysSmtpHost] = useState('mail.yourdomain.com');
+  const [sysSmtpPort, setSysSmtpPort] = useState(465);
+  const [sysSmtpSecure, setSysSmtpSecure] = useState(true);
+  const [sysSaving, setSysSaving] = useState(false);
+  const [sysBanner, setSysBanner] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const loadMailboxesOverview = async () => {
     try {
-      const result = await saveServerMailAccount({
-        id: serverEditingId,
-        label: serverLabel.trim() || serverEmail.split('@')[0],
+      const res = await fetch('/api/settings/mailboxes/overview');
+      if (res.ok) {
+        const data = await res.json();
+        setMailboxesOverview(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'accounts') {
+      loadMailboxesOverview();
+    }
+  }, [activeSubTab, gmailAccounts, serverAccounts]);
+
+  const handleTestActiveSystemMail = async () => {
+    setTestingActiveSystemMail(true);
+    setActiveSystemMailTestResult(null);
+    try {
+      const res = await fetch('/api/settings/system-mail/test-connection', { method: 'POST' });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        setActiveSystemMailTestResult({
+          ok: true,
+          message: result.message || 'Active System Mail SMTP handshake verified successfully!',
+          host: result.host,
+        });
+        showToast('success', 'Active System Mail verified!');
+      } else {
+        setActiveSystemMailTestResult({
+          ok: false,
+          message: result.error || 'Connection handshake failed.',
+          host: result.host,
+        });
+        showToast('error', result.error || 'System Mail handshake failed.');
+      }
+    } catch (err: any) {
+      setActiveSystemMailTestResult({ ok: false, message: err?.message || 'Network test failed.' });
+      showToast('error', 'Connection test failed.');
+    } finally {
+      setTestingActiveSystemMail(false);
+      loadMailboxesOverview();
+    }
+  };
+
+  const handleUpdateMailboxRole = async (
+    type: 'server_mail' | 'gmail',
+    id: string,
+    role: string,
+    isSystemPrimary = false
+  ) => {
+    try {
+      const res = await fetch(`/api/settings/mailboxes/${type}/${id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, isSystemPrimary }),
+      });
+      if (!res.ok) throw new Error('Failed to update mailbox role.');
+      showToast('success', `Mailbox role updated to ${role.toUpperCase()}`);
+      await loadMailboxesOverview();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Could not update mailbox role.');
+    }
+  };
+
+  const handleAddSystemMailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sysEmail.trim() || !sysPassword.trim()) {
+      setSysBanner({ ok: false, text: 'Please enter email address and password.' });
+      return;
+    }
+    setSysSaving(true);
+    setSysBanner(null);
+    try {
+      const res = await fetch('/api/settings/system-mail/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: sysType,
+          email: sysEmail.trim(),
+          label: sysLabel.trim() || (sysType === 'gmail' ? 'System Gmail' : 'System Mail'),
+          password: sysPassword.trim(),
+          smtpHost: sysSmtpHost.trim(),
+          smtpPort: Number(sysSmtpPort) || 465,
+          smtpSecure: sysSmtpSecure,
+          setAsPrimary: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add System Mail.');
+
+      showToast('success', `System Mail ${sysEmail} added & activated!`);
+      setShowAddSystemMailModal(false);
+      setSysEmail('');
+      setSysPassword('');
+      setSysLabel('');
+      await loadMailboxesOverview();
+    } catch (err: any) {
+      setSysBanner({ ok: false, text: err?.message || 'Failed to register System Mail.' });
+    } finally {
+      setSysSaving(false);
+    }
+  };
+
+  // Handlers for Gmail
+  const handleVerifyGmail = async () => {
+    if (!gmailEmail.trim()) {
+      showToast('error', 'Please enter a Gmail address.');
+      return;
+    }
+    setIsVerifyingGmail(true);
+    setGmailVerifyResult(null);
+    try {
+      const res = await verifyGmailConnectionOnServer({
+        email: gmailEmail.trim(),
+        password: gmailPassword.trim() || undefined,
+        imapHost: gmailImapHost.trim() || 'imap.gmail.com',
+        imapPort: Number(gmailImapPort) || 993,
+        smtpHost: gmailSmtpHost.trim() || 'smtp.gmail.com',
+        smtpPort: Number(gmailSmtpPort) || 465,
+      });
+      const msg = res.ok ? 'Connection verified successfully!' : (res.imapMessage || res.smtpMessage || 'Verification failed');
+      setGmailVerifyResult({ ok: res.ok, message: msg });
+      if (res.ok) {
+        showToast('success', 'Gmail connection verified successfully!');
+      } else {
+        showToast('error', msg);
+      }
+    } catch (err: any) {
+      showToast('error', err?.message || 'Verification failed.');
+    } finally {
+      setIsVerifyingGmail(false);
+    }
+  };
+
+  const handleSaveGmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gmailEmail.trim()) {
+      showToast('error', 'Gmail address is required.');
+      return;
+    }
+    setIsSavingGmail(true);
+    try {
+      const res = await saveGmailAccountOnServer({
+        id: gmailEditingId,
+        label: gmailLabel.trim() || gmailEmail.trim().split('@')[0],
+        email: gmailEmail.trim(),
+        password: gmailPassword.trim() || undefined,
+        imapHost: gmailImapHost.trim() || 'imap.gmail.com',
+        imapPort: Number(gmailImapPort) || 993,
+        smtpHost: gmailSmtpHost.trim() || 'smtp.gmail.com',
+        smtpPort: Number(gmailSmtpPort) || 465,
+        authMode: gmailAuthMode,
+        clientId: gmailClientId.trim() || undefined,
+        clientSecret: gmailClientSecret.trim() || undefined,
+        refreshToken: gmailRefreshToken.trim() || undefined,
+      });
+
+      onGmailAccountsChanged(res.accounts, activeGmailEmail || res.account.email);
+      showToast('success', `Saved Gmail account ${res.account.email}`);
+      resetGmailForm();
+      setShowAccountModal(false);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to save Gmail account.');
+    } finally {
+      setIsSavingGmail(false);
+    }
+  };
+
+  const handleEditGmailAccount = (acc: ConnectedGmailAccount) => {
+    resetGmailForm();
+    setGmailEditingId(acc.id || acc.email);
+    setGmailLabel(acc.displayName || '');
+    setGmailEmail(acc.email || '');
+    setGmailAuthMode(acc.authMode || 'app_password');
+    setGmailImapHost(acc.imapHost || 'imap.gmail.com');
+    setGmailImapPort(acc.imapPort || 993);
+    setGmailSmtpHost(acc.smtpHost || 'smtp.gmail.com');
+    setGmailSmtpPort(acc.smtpPort || 465);
+    setGmailClientId(acc.clientId || '');
+    setAccountType('gmail');
+    setShowAccountModal(true);
+  };
+
+  // Handlers for Server Mail
+  const handleVerifyServerMail = async () => {
+    if (!serverEmail.trim() || !serverImapHost.trim() || !serverSmtpHost.trim()) {
+      showToast('error', 'Email, IMAP host, and SMTP host are required.');
+      return;
+    }
+    setIsVerifyingServer(true);
+    setServerVerifyResult(null);
+    try {
+      const res = await verifyServerMailConnection({
         email: serverEmail.trim(),
-        username: (serverUsername || serverEmail).trim(),
-        password: serverPassword || undefined,
+        username: serverUsername.trim() || serverEmail.trim(),
+        password: serverPassword.trim() || undefined,
         imapHost: serverImapHost.trim(),
         imapPort: Number(serverImapPort) || 993,
         imapSecure: serverImapSecure,
@@ -518,53 +557,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         smtpPort: Number(serverSmtpPort) || 465,
         smtpSecure: serverSmtpSecure,
       });
-      onServerAccountsChanged(result.accounts, result.account.id);
-      showToast('success', `Server Mail "${result.account.email}" saved & encrypted in database!`);
-      resetServerForm();
+      setServerVerifyResult(res);
+      if (res.ok) {
+        showToast('success', 'Server Mail verified successfully!');
+      } else {
+        showToast('error', res.imapMessage || res.smtpMessage || (res as any).error || 'Server Mail verification failed.');
+      }
     } catch (err: any) {
-      showToast('error', err?.message || 'Failed to save Server Mail account.');
+      showToast('error', err?.message || 'Verification failed.');
+    } finally {
+      setIsVerifyingServer(false);
+    }
+  };
+
+  const handleSaveServerMail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!serverEmail.trim() || !serverImapHost.trim() || !serverSmtpHost.trim()) {
+      showToast('error', 'Email, IMAP host, and SMTP host are required.');
+      return;
+    }
+    setIsSavingServer(true);
+    try {
+      const res = await saveServerMailAccount({
+        id: serverEditingId,
+        label: serverLabel.trim() || serverEmail.trim(),
+        email: serverEmail.trim(),
+        username: serverUsername.trim() || serverEmail.trim(),
+        password: serverPassword.trim() || undefined,
+        imapHost: serverImapHost.trim(),
+        imapPort: Number(serverImapPort) || 993,
+        imapSecure: serverImapSecure,
+        smtpHost: serverSmtpHost.trim(),
+        smtpPort: Number(serverSmtpPort) || 465,
+        smtpSecure: serverSmtpSecure,
+      });
+
+      onServerAccountsChanged(res.accounts, activeServerAccountId || res.account.id);
+      showToast('success', `Saved Server Mail ${res.account.email}`);
+      resetServerForm();
+      setShowAccountModal(false);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to save Server Mail.');
     } finally {
       setIsSavingServer(false);
     }
   };
 
-  const handleAddExternalConnector = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!extLabel.trim() || !extSecretKey.trim()) {
-      showToast('error', 'Label and Secret Key / API Token are required.');
-      return;
-    }
-    setIsSavingExt(true);
-    try {
-      const updated = await addExternalIntegration({
-        providerType: extType,
-        label: extLabel.trim(),
-        endpointOrHost: extEndpoint.trim(),
-        clientIdOrKey: extClientId.trim(),
-        secretKey: extSecretKey.trim(),
-      });
-      setSysSettings((prev) => ({ ...prev, externalIntegrations: updated }));
-      setExtLabel('');
-      setExtEndpoint('');
-      setExtClientId('');
-      setExtSecretKey('');
-      showToast('success', 'External API / Webhook credential encrypted and saved!');
-    } catch (err: any) {
-      showToast('error', err?.message || 'Failed to save external integration.');
-    } finally {
-      setIsSavingExt(false);
-    }
+  const handleEditServerMailAccount = (acc: ServerMailAccount) => {
+    resetServerForm();
+    setServerEditingId(acc.id);
+    setServerLabel(acc.label);
+    setServerEmail(acc.email);
+    setServerUsername(acc.username || acc.email);
+    setServerImapHost(acc.imapHost);
+    setServerImapPort(acc.imapPort);
+    setServerImapSecure(acc.imapSecure);
+    setServerSmtpHost(acc.smtpHost);
+    setServerSmtpPort(acc.smtpPort);
+    setServerSmtpSecure(acc.smtpSecure);
+    setAccountType('server_mail');
+    setShowAccountModal(true);
   };
 
+  // Handlers for System Settings
   const handleSaveSystemSettingsForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingSys(true);
     try {
       const res = await saveSystemSettings(sysSettings, cmhRules);
       setSysSettings(res.settings);
-      setCmhRules(res.cmhRules);
-      onWorkspaceNameChanged?.(res.settings.workspaceName);
-      showToast('success', 'Workspace settings saved to database!');
+      if (res.cmhRules) setCmhRules(res.cmhRules);
+      if (onWorkspaceNameChanged && sysSettings.workspaceName) {
+        onWorkspaceNameChanged(sysSettings.workspaceName);
+      }
+      showToast('success', 'Settings saved successfully.');
     } catch (err: any) {
       showToast('error', err?.message || 'Failed to save settings.');
     } finally {
@@ -572,58 +638,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleSavePostgresAndMigrate = async (testNow: boolean) => {
-    setIsSavingPg(true);
-    setPgMigrationFeedback(null);
+  // Handlers for Storage & Backup
+  const handleRunSmartStorageCleanup = async (days: number) => {
+    setIsCleaningStorage(true);
     try {
-      const res = await saveDatabaseConfig({
-        enabled: true,
-        connectionString: pgConfig.connectionString?.trim() || undefined,
-        host: pgConfig.host,
-        port: Number(pgConfig.port) || 5432,
-        database: pgConfig.database,
-        user: pgConfig.user,
-        password: pgPassword || undefined,
-        ssl: pgConfig.ssl,
-        autoMigrateOnStartup: pgConfig.autoMigrateOnStartup,
-        testAndMigrateNow: testNow,
-      });
-      setPgConfig(res.config);
-      setPgPassword('');
-      if (res.migration) {
-        setPgMigrationFeedback({
-          ok: res.migration.ok,
-          message: res.migration.message,
-        });
-      }
-      showToast(
-        'success',
-        testNow
-          ? 'PostgreSQL connected & Prisma schema synchronized!'
-          : 'PostgreSQL configuration saved to .env!'
-      );
+      const res = await runVpsStorageCleanup({ purgeTrashOlderThanDays: days, pruneOrphans: true });
+      setVpsDiag(res.storage);
+      const totalRemoved = res.cleanup.removedOrphans + res.cleanup.removedTrashedFiles;
+      showToast('success', `Cleanup complete! Removed ${totalRemoved} temporary files (${formatBytes(res.cleanup.reclaimedBytes)} freed).`);
     } catch (err: any) {
-      setPgMigrationFeedback({
-        ok: false,
-        message: err?.message || 'Unable to connect to PostgreSQL.',
-      });
-      showToast('error', err?.message || 'PostgreSQL connection failed.');
+      showToast('error', err?.message || 'Storage cleanup failed.');
     } finally {
-      setIsSavingPg(false);
+      setIsCleaningStorage(false);
     }
   };
 
   const handleExportBackup = async () => {
     try {
-      const backup = await exportWorkspaceBackupJson();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `workspace-pro-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('success', 'Full Workspace database backup downloaded!');
+      await exportWorkspaceBackupJson();
+      showToast('success', 'Relational backup exported successfully.');
     } catch (err: any) {
       showToast('error', err?.message || 'Backup export failed.');
     }
@@ -635,93 +668,196 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const res = await restoreWorkspaceBackupJson(parsed);
-      showToast('success', res.message);
-      loadAllSettingsData();
+      await restoreWorkspaceBackupJson(parsed);
+      showToast('success', 'Backup restored successfully! Refreshing...');
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
-      showToast('error', err?.message || 'Invalid backup JSON file.');
-    } finally {
-      if (backupFileInputRef.current) backupFileInputRef.current.value = '';
+      showToast('error', err?.message || 'Failed to restore backup file.');
     }
   };
 
-  const handleRunSmartStorageCleanup = async (purgeDays = 30) => {
-    setIsCleaningStorage(true);
+  const formatCatalogSyncedTime = (isoStr?: string): string => {
+    if (!isoStr) return 'Recently';
     try {
-      const res = await runVpsStorageCleanup({
-        pruneOrphans: true,
-        purgeTrashOlderThanDays: purgeDays,
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
-      setVpsStorage(res.storage);
-      showToast(
-        'success',
-        `Smart cleanup complete: removed ${res.cleanup.removedOrphans} orphan files & ${res.cleanup.removedTrashedFiles} expired trash items (${formatBytes(res.cleanup.reclaimedBytes)} freed).`
+    } catch {
+      return 'Recently';
+    }
+  };
+
+  const loadCatalogData = async () => {
+    setIsLoadingCatalog(true);
+    try {
+      const data = await fetchPostgresCatalog();
+      setCatalogInfo(data);
+      const now = new Date();
+      setCatalogLastLoaded(
+        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       );
     } catch (err: any) {
-      showToast('error', err?.message || 'Storage cleanup failed.');
+      showToast('error', err?.message || 'Failed to load database catalog.');
     } finally {
-      setIsCleaningStorage(false);
+      setIsLoadingCatalog(false);
     }
   };
 
+  const loadDbConfigData = async () => {
+    try {
+      const res = await fetchDatabaseConfig();
+      if (res && res.config) {
+        setDbConfig(res.config);
+        setRawConnectionUrl(res.config.connectionString || '');
+        setPgHost(res.config.host || '');
+        setPgPort(res.config.port || 5432);
+        setPgDatabase(res.config.database || '');
+        setPgUser(res.config.user || '');
+        setPgSsl(res.config.ssl ?? true);
+        setAutoMigrate(res.config.autoMigrateOnStartup ?? true);
+      }
+    } catch (err) {
+      console.error('Failed to load database config:', err);
+    }
+  };
+
+  const handleSaveConnectionUrl = async () => {
+    if (!rawConnectionUrl.trim()) {
+      showToast('error', 'Please enter a valid PostgreSQL connection string.');
+      return;
+    }
+    setIsSavingDbConfig(true);
+    try {
+      const res = await saveDatabaseConfig({
+        connectionString: rawConnectionUrl.trim(),
+        autoMigrateOnStartup: autoMigrate,
+        testAndMigrateNow: true,
+      });
+      setDbConfig(res.config);
+      showToast('success', res.config.statusMessage || 'PostgreSQL database connected and verified!');
+      await loadCatalogData();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to connect to database.');
+    } finally {
+      setIsSavingDbConfig(false);
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!pgHost.trim() || !pgDatabase.trim() || !pgUser.trim()) {
+      showToast('error', 'Host, Database, and User fields are required.');
+      return;
+    }
+    setIsSavingDbConfig(true);
+    try {
+      const res = await saveDatabaseConfig({
+        host: pgHost.trim(),
+        port: Number(pgPort) || 5432,
+        database: pgDatabase.trim(),
+        user: pgUser.trim(),
+        password: pgPassword ? pgPassword : undefined,
+        ssl: pgSsl,
+        autoMigrateOnStartup: autoMigrate,
+        testAndMigrateNow: true,
+      });
+      setDbConfig(res.config);
+      showToast('success', res.config.statusMessage || 'PostgreSQL database connected and verified!');
+      await loadCatalogData();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to connect to database.');
+    } finally {
+      setIsSavingDbConfig(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'database') {
+      if (!catalogInfo) {
+        loadCatalogData();
+      }
+      if (!dbConfig) {
+        loadDbConfigData();
+      }
+    }
+  }, [activeSubTab]);
+
+  const filteredTables = (catalogInfo?.tables || []).filter((t) => {
+    if (nonEmptyOnly && t.rowCount === 0) return false;
+    if (tableSearchQuery.trim()) {
+      return t.tableName.toLowerCase().includes(tableSearchQuery.toLowerCase().trim());
+    }
+    return true;
+  });
+
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const totalConnectedMailboxes = gmailAccounts.length + serverAccounts.length;
+
+  // Modern navigation tabs (Map old keys seamlessly)
   const navItems: Array<{
     id: SettingsSubTab;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
+    count?: number;
   }> = [
-    { id: 'accounts', label: 'Accounts & Connections', icon: KeyRound },
-    { id: 'general', label: 'General & Branding', icon: Sliders },
-    { id: 'mail_rules', label: 'Mail, Signatures & Tabs', icon: Mail },
-    { id: 'database', label: 'PostgreSQL & Backup', icon: Database },
-    { id: 'security', label: 'Security, Webhooks & Access', icon: ShieldCheck },
+    { id: 'general', label: 'General & Workspace', icon: Sliders },
+    { id: 'feed', label: 'Main Feed', icon: Sliders },
+    { id: 'accounts', label: 'Email & Channels', icon: Mail, count: totalConnectedMailboxes },
+    { id: 'mail_rules', label: 'Notifications & Rules', icon: BellRing },
+    { id: 'database', label: 'Storage & Backup', icon: HardDrive },
+    { id: 'security', label: 'Access & Security', icon: ShieldCheck },
   ];
 
   return (
     <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 md:rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-      {/* Top Settings Sub-Navigation Header */}
-      <div className="px-4 sm:px-6 py-3 bg-[#F8FAFD] dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0B57D0]/10 border border-[#0B57D0]/20 flex items-center justify-center text-[#0B57D0]">
-            <Settings className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Settings &amp; Account Control Center
-            </h1>
-            <p className="text-xs text-slate-500">
-              Centralized management for Gmail, Server Mail, SMTP Relays, PostgreSQL Database, and External Storage
-            </p>
-          </div>
-        </div>
-
-        {/* Sub-Tab Selector Pills */}
+      {/* Clean 1-Line Sub-Navigation Tab Bar (Zero Redundant Header Bloat) */}
+      <div className="px-4 sm:px-6 py-2.5 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {navItems.map((item) => {
+          {navItems.filter((item) => item.label.toLowerCase().includes(settingsSearch.trim().toLowerCase())).map((item) => {
             const Icon = item.icon;
-            const active = activeSubTab === item.id;
+            const active =
+              activeSubTab === item.id;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onSelectSubTab(item.id)}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
                   active
-                    ? 'bg-[#0B57D0] text-white shadow-2xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 hover:bg-slate-100'
+                    ? 'bg-[#0B57D0] text-white shadow-xs'
+                    : 'bg-slate-100/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-750'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{item.label}</span>
+                {item.count !== undefined && item.count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
+
+        <input aria-label="Find a settings section" placeholder="Find settings" value={settingsSearch}
+          onChange={(event) => setSettingsSearch(event.target.value)}
+          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900 sm:w-40" />
       </div>
 
       {/* Toast Feedback Banner */}
       {toastMsg && (
         <div
-          className={`mx-4 sm:mx-6 mt-3 px-4 py-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+          className={`mx-4 sm:mx-6 mt-3 px-4 py-2 rounded-xl border flex items-center justify-between text-xs font-semibold ${
             toastMsg.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-red-50 border-red-200 text-red-800'
@@ -738,1140 +874,682 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             type="button"
             onClick={() => setToastMsg(null)}
-            className="text-slate-400 hover:text-slate-700"
+            className="text-slate-400 hover:text-slate-700 cursor-pointer"
           >
-            Dismiss
+            ✕
           </button>
         </div>
       )}
 
-      {/* Main Scrollable Settings Content */}
+      {/* Main Scrollable Settings Body */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+
           {/* ===================================================================
-              TAB 1: ACCOUNTS & CONNECTIONS HUB
+              TAB 1: GENERAL & WORKSPACE BRANDING
           =================================================================== */}
-          {activeSubTab === 'accounts' && (
-            <div className="space-y-6">
-              {/* Connected Accounts Overview Directory */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Connected Gmail Accounts Card */}
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-[#EA4335]" />
-                      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                        Connected Gmail Accounts ({gmailAccounts.length})
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetGmailForm();
-                        setAccountType('gmail');
-                      }}
-                      className="text-xs font-semibold text-[#0B57D0] hover:underline flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Gmail</span>
-                    </button>
-                  </div>
-
-                  {gmailAccounts.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 text-center">
-                      No Gmail accounts added yet. Use the form below to connect your Gmail via App Password or Secret Key.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {gmailAccounts.map((acc) => {
-                        const isCurrent = activeGmailEmail === acc.email;
-                        return (
-                          <div
-                            key={acc.id || acc.email}
-                            className={`flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border ${
-                              isCurrent
-                                ? 'border-[#0B57D0] bg-blue-50/40 dark:bg-blue-950/30'
-                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
-                                <span className="truncate">{acc.displayName}</span>
-                                {isCurrent && (
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold">
-                                    Active
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] font-mono text-slate-500 truncate">
-                                {acc.email} · {acc.imapHost || 'imap.gmail.com'}:
-                                {acc.imapPort || 993}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {!isCurrent && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const switched = switchActiveGmailAccount(acc.email);
-                                    if (switched) {
-                                      onGmailAccountsChanged(gmailAccounts, switched.email);
-                                      showToast('success', `Active Gmail switched to ${switched.email}`);
-                                    }
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-[#0B57D0] text-white text-[11px] font-semibold"
-                                >
-                                  Set Active
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  switchActiveGmailAccount(acc.email);
-                                  onGmailAccountsChanged(gmailAccounts, acc.email);
-                                  onOpenModule('gmail');
-                                }}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold hover:bg-slate-50"
-                              >
-                                Inbox
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleTestGmail(acc)}
-                                className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium hover:bg-slate-200"
-                              >
-                                Test
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleEditGmailAccount(acc)}
-                                className="p-1.5 text-slate-500 hover:text-[#0B57D0]"
-                                title="Edit Gmail Account"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const remaining = await removeGmailAccount(acc.id || acc.email);
-                                  onGmailAccountsChanged(remaining, remaining[0]?.email || null);
-                                  showToast('success', `Removed Gmail account ${acc.email}`);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-red-600"
-                                title="Remove Gmail Account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Connected Server Mail / Domain Accounts Card */}
-                <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Server className="w-4 h-4 text-[#0B57D0]" />
-                      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                        Connected Server Mail Accounts ({serverAccounts.length})
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetServerForm();
-                        setAccountType('server_mail');
-                      }}
-                      className="text-xs font-semibold text-[#0B57D0] hover:underline flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Server Mail</span>
-                    </button>
-                  </div>
-
-                  {serverAccounts.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 text-center">
-                      No Server Mail / Domain accounts added yet. Select "Server Mail (Domain)" below to add your cPanel or custom IMAP/SMTP account.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {serverAccounts.map((acc) => {
-                        const isCurrent = activeServerAccountId === acc.id;
-                        return (
-                          <div
-                            key={acc.id}
-                            className={`flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border ${
-                              isCurrent
-                                ? 'border-[#0B57D0] bg-blue-50/40 dark:bg-blue-950/30'
-                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/40'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
-                                <span className="truncate">{acc.label}</span>
-                                {isCurrent && (
-                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold">
-                                    Active
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] font-mono text-slate-500 truncate">
-                                {acc.email} · {acc.imapHost}:{acc.imapPort}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {!isCurrent && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onSelectServerAccount(acc.id);
-                                    showToast('success', `Active Server Mail set to ${acc.email}`);
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-[#0B57D0] text-white text-[11px] font-semibold"
-                                >
-                                  Set Active
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onSelectServerAccount(acc.id);
-                                  onOpenModule('server_mail');
-                                }}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold hover:bg-slate-50"
-                              >
-                                Inbox
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleTestServerMail(acc)}
-                                className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-medium hover:bg-slate-200"
-                              >
-                                Test
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleEditServerAccount(acc)}
-                                className="p-1.5 text-slate-500 hover:text-[#0B57D0]"
-                                title="Edit Server Mail Account"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const next = await deleteServerMailAccount(acc.id);
-                                  onServerAccountsChanged(next, next[0]?.id);
-                                  showToast('success', `Removed Server Mail ${acc.email}`);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-red-600"
-                                title="Remove Server Mail Account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Add / Configure Account Selector Box */}
-              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Add or Update Account Connection
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>
-                        Choose the account type below. All passwords and secret keys are encrypted with AES-256-GCM.
-                      </span>
-                    </p>
-                  </div>
-
-                  {/* Account Type Selector Tabs */}
-                  <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                    {[
-                      { id: 'gmail', label: 'Gmail Account', icon: Mail },
-                      { id: 'server_mail', label: 'Server Mail (Domain)', icon: Server },
-                      { id: 'smtp_relay', label: 'Transactional SMTP Relay', icon: Layers },
-                      { id: 'api_webhook', label: 'API Key / Webhook', icon: Webhook },
-                    ].map((t) => {
-                      const Icon = t.icon;
-                      const active = accountType === t.id;
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setAccountType(t.id as AccountSetupType)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                            active
-                              ? 'bg-white dark:bg-slate-900 text-[#0B57D0] shadow-xs'
-                              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                          }`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span>{t.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* FORM A: GMAIL ACCOUNT */}
-                {accountType === 'gmail' && (
-                  <form onSubmit={handleSaveGmail} className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[#EA4335] flex items-center gap-1.5">
-                        <Mail className="w-4 h-4" />
-                        {gmailEditingId
-                          ? `Editing Gmail Account (${gmailEmail})`
-                          : 'Connect Gmail via App Password or OAuth Client Secret'}
-                      </span>
-                      <div className="flex items-center gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setGmailAuthMode('app_password')}
-                          className={`px-3 py-1 rounded-full font-semibold ${
-                            gmailAuthMode === 'app_password'
-                              ? 'bg-[#EA4335]/10 text-[#EA4335] border border-[#EA4335]/30'
-                              : 'text-slate-500 hover:bg-slate-100'
-                          }`}
-                        >
-                          App Password / Secret Key
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGmailAuthMode('oauth_secret')}
-                          className={`px-3 py-1 rounded-full font-semibold ${
-                            gmailAuthMode === 'oauth_secret'
-                              ? 'bg-[#EA4335]/10 text-[#EA4335] border border-[#EA4335]/30'
-                              : 'text-slate-500 hover:bg-slate-100'
-                          }`}
-                        >
-                          OAuth Client ID &amp; Secret
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Display Name / Label
-                        </label>
-                        <input
-                          type="text"
-                          value={gmailLabel}
-                          onChange={(e) => setGmailLabel(e.target.value)}
-                          placeholder="e.g. Executive Gmail or Support"
-                          className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Gmail Address *
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={gmailEmail}
-                          onChange={(e) => setGmailEmail(e.target.value)}
-                          placeholder="yourname@gmail.com"
-                          className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                    </div>
-
-                    {gmailAuthMode === 'app_password' ? (
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          {gmailEditingId
-                            ? 'Google App Password / Secret Key (leave blank to keep existing)'
-                            : 'Google App Password / Secret Key *'}
-                        </label>
-                        <input
-                          type="password"
-                          required={!gmailEditingId}
-                          value={gmailPassword}
-                          onChange={(e) => setGmailPassword(e.target.value)}
-                          placeholder="16-character Google App Password (e.g. abcd efgh ijkl mnop)"
-                          className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Google Client ID
-                          </label>
-                          <input
-                            type="text"
-                            value={gmailClientId}
-                            onChange={(e) => setGmailClientId(e.target.value)}
-                            placeholder="xxxx.apps.googleusercontent.com"
-                            className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Client Secret
-                          </label>
-                          <input
-                            type="password"
-                            value={gmailClientSecret}
-                            onChange={(e) => setGmailClientSecret(e.target.value)}
-                            placeholder="GOCSPX-..."
-                            className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            App Password / Refresh Token *
-                          </label>
-                          <input
-                            type="password"
-                            required={!gmailEditingId}
-                            value={gmailPassword || gmailRefreshToken}
-                            onChange={(e) => {
-                              setGmailPassword(e.target.value);
-                              setGmailRefreshToken(e.target.value);
-                            }}
-                            placeholder="1//04... or App Password"
-                            className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          IMAP Host
-                        </label>
-                        <input
-                          type="text"
-                          value={gmailImapHost}
-                          onChange={(e) => setGmailImapHost(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          IMAP Port (SSL)
-                        </label>
-                        <input
-                          type="number"
-                          value={gmailImapPort}
-                          onChange={(e) => setGmailImapPort(Number(e.target.value))}
-                          className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          SMTP Host
-                        </label>
-                        <input
-                          type="text"
-                          value={gmailSmtpHost}
-                          onChange={(e) => setGmailSmtpHost(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          SMTP Port (SSL)
-                        </label>
-                        <input
-                          type="number"
-                          value={gmailSmtpPort}
-                          onChange={(e) => setGmailSmtpPort(Number(e.target.value))}
-                          className="w-full px-3 py-1.5 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                        />
-                      </div>
-                    </div>
-
-                    {gmailVerifyResult && (
-                      <div
-                        className={`p-3.5 rounded-xl border text-xs space-y-1 ${
-                          gmailVerifyResult.ok
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                            : 'bg-amber-50 border-amber-200 text-amber-900'
-                        }`}
-                      >
-                        <div className="font-semibold">
-                          • Incoming IMAP: {gmailVerifyResult.imapMessage}
-                        </div>
-                        <div className="font-semibold">
-                          • Outgoing SMTP: {gmailVerifyResult.smtpMessage}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
-                      {gmailEditingId && (
-                        <button
-                          type="button"
-                          onClick={resetGmailForm}
-                          className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                        >
-                          Cancel Edit
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleTestGmail()}
-                        disabled={isVerifyingGmail || !gmailEmail}
-                        className="px-4 py-2 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50"
-                      >
-                        {isVerifyingGmail ? 'Testing Gmail...' : 'Test IMAP & SMTP'}
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSavingGmail}
-                        className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
-                      >
-                        {isSavingGmail
-                          ? 'Saving...'
-                          : gmailEditingId
-                          ? 'Update Gmail Account'
-                          : 'Save Gmail Account'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* FORM B & C: SERVER MAIL (cPANEL / DOMAIN) OR TRANSACTIONAL SMTP RELAY */}
-                {(accountType === 'server_mail' || accountType === 'smtp_relay') && (
-                  <form onSubmit={handleSaveServerMail} className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[#0B57D0] flex items-center gap-1.5">
-                        <Server className="w-4 h-4" />
-                        {serverEditingId
-                          ? `Editing Server Mail (${serverEmail})`
-                          : accountType === 'smtp_relay'
-                          ? 'Add Transactional SMTP / Relay Account'
-                          : 'Add cPanel / Custom Domain IMAP & SMTP Account'}
-                      </span>
-
-                      {/* Quick Provider Presets */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] text-slate-400">Quick Preset:</span>
-                        {SMTP_RELAY_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => {
-                              setServerImapHost(preset.imapHost);
-                              setServerImapPort(preset.imapPort);
-                              setServerImapSecure(preset.imapPort === 993);
-                              setServerSmtpHost(preset.smtpHost);
-                              setServerSmtpPort(preset.smtpPort);
-                              setServerSmtpSecure(preset.smtpPort === 465);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
-                          >
-                            {preset.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Account Label / Department Name
-                        </label>
-                        <input
-                          type="text"
-                          value={serverLabel}
-                          onChange={(e) => setServerLabel(e.target.value)}
-                          placeholder="e.g. Official Domain Support"
-                          className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Sender / Domain Email Address *
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={serverEmail}
-                          onChange={(e) => handleServerEmailChange(e.target.value)}
-                          placeholder="admin@yourdomain.com"
-                          className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          SMTP / IMAP Username *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={serverUsername}
-                          onChange={(e) => setServerUsername(e.target.value)}
-                          placeholder="admin@yourdomain.com or API username"
-                          className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          {serverEditingId
-                            ? 'Password / SMTP Key (leave blank to keep existing)'
-                            : 'Password / SMTP Secret Key *'}
-                        </label>
-                        <input
-                          type="password"
-                          required={!serverEditingId}
-                          value={serverPassword}
-                          onChange={(e) => setServerPassword(e.target.value)}
-                          placeholder="••••••••••••"
-                          className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          Incoming Server (IMAP)
-                        </div>
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div className="col-span-2">
-                            <label className="block text-[11px] text-slate-500 mb-1">
-                              IMAP Host *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={serverImapHost}
-                              onChange={(e) => setServerImapHost(e.target.value)}
-                              placeholder="mail.yourdomain.com"
-                              className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-slate-500 mb-1">
-                              Port *
-                            </label>
-                            <input
-                              type="number"
-                              required
-                              value={serverImapPort}
-                              onChange={(e) => setServerImapPort(Number(e.target.value))}
-                              className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                        </div>
-                        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={serverImapSecure}
-                            onChange={(e) => setServerImapSecure(e.target.checked)}
-                            className="rounded accent-[#0B57D0]"
-                          />
-                          <span>Use SSL/TLS (Port 993)</span>
-                        </label>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          Outgoing Server (SMTP)
-                        </div>
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div className="col-span-2">
-                            <label className="block text-[11px] text-slate-500 mb-1">
-                              SMTP Host *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={serverSmtpHost}
-                              onChange={(e) => setServerSmtpHost(e.target.value)}
-                              placeholder="mail.yourdomain.com"
-                              className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-slate-500 mb-1">
-                              Port *
-                            </label>
-                            <input
-                              type="number"
-                              required
-                              value={serverSmtpPort}
-                              onChange={(e) => setServerSmtpPort(Number(e.target.value))}
-                              className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                        </div>
-                        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={serverSmtpSecure}
-                            onChange={(e) => setServerSmtpSecure(e.target.checked)}
-                            className="rounded accent-[#0B57D0]"
-                          />
-                          <span>Use SSL/TLS (Port 465)</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {serverVerifyResult && (
-                      <div
-                        className={`p-3.5 rounded-xl border text-xs space-y-1 ${
-                          serverVerifyResult.ok
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                            : 'bg-amber-50 border-amber-200 text-amber-900'
-                        }`}
-                      >
-                        <div className="font-semibold">
-                          • Incoming IMAP: {serverVerifyResult.imapMessage}
-                        </div>
-                        <div className="font-semibold">
-                          • Outgoing SMTP: {serverVerifyResult.smtpMessage}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
-                      {serverEditingId && (
-                        <button
-                          type="button"
-                          onClick={resetServerForm}
-                          className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                        >
-                          Cancel Edit
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleTestServerMail()}
-                        disabled={isVerifyingServer || !serverEmail || !serverImapHost || !serverSmtpHost}
-                        className="px-4 py-2 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50"
-                      >
-                        {isVerifyingServer ? 'Checking Server...' : 'Test IMAP & SMTP'}
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSavingServer}
-                        className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
-                      >
-                        {isSavingServer
-                          ? 'Saving...'
-                          : serverEditingId
-                          ? 'Update Server Mail'
-                          : 'Save Server Mail Account'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* FORM D: EXTERNAL API KEY / WEBHOOK CONNECTOR */}
-                {accountType === 'api_webhook' && (
-                  <div className="space-y-4">
-                    <form onSubmit={handleAddExternalConnector} className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Connector Type
-                          </label>
-                          <select
-                            value={extType}
-                            onChange={(e) =>
-                              setExtType(e.target.value as ExternalIntegrationClient['providerType'])
-                            }
-                            className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          >
-                            <option value="CUSTOM_API">External App / REST API Key</option>
-                            <option value="WEBHOOK">Outgoing / Incoming Webhook Endpoint</option>
-                            <option value="STORAGE_S3">Cloud Object Storage (S3 / R2) Key</option>
-                            <option value="SMTP_RELAY">API Mail Token (SendGrid / Resend / Mailgun)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Connection Label *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={extLabel}
-                            onChange={(e) => setExtLabel(e.target.value)}
-                            placeholder="e.g. CRM Webhook or Production API Key"
-                            className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Endpoint URL / Host (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={extEndpoint}
-                            onChange={(e) => setExtEndpoint(e.target.value)}
-                            placeholder="https://api.yourdomain.com/v1/webhook"
-                            className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Client ID / App Key (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={extClientId}
-                            onChange={(e) => setExtClientId(e.target.value)}
-                            placeholder="app_id_..."
-                            className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Secret Key / Bearer Token *
-                          </label>
-                          <input
-                            type="password"
-                            required
-                            value={extSecretKey}
-                            onChange={(e) => setExtSecretKey(e.target.value)}
-                            placeholder="sk_live_••••••••••••••••••••••••"
-                            className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end">
-                        <button
-                          type="submit"
-                          disabled={isSavingExt}
-                          className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
-                        >
-                          {isSavingExt ? 'Encrypting & Saving...' : 'Save API / Webhook Key'}
-                        </button>
-                      </div>
-                    </form>
-
-                    {sysSettings.externalIntegrations.length > 0 && (
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          Saved API &amp; Webhook Keys ({sysSettings.externalIntegrations.length})
-                        </div>
-                        <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                          {sysSettings.externalIntegrations.map((ext) => (
-                            <div
-                              key={ext.id}
-                              className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 text-xs"
-                            >
-                              <div>
-                                <div className="font-bold text-slate-900 dark:text-slate-100">
-                                  {ext.label}{' '}
-                                  <span className="ml-1.5 px-2 py-0.5 rounded bg-blue-50 text-[#0B57D0] text-[10px]">
-                                    {ext.providerType}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] font-mono text-slate-500">
-                                  {ext.endpointOrHost || 'Local Engine'} · Key: {ext.secretPreview}
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const next = await deleteExternalIntegration(ext.id);
-                                  setSysSettings((prev) => ({
-                                    ...prev,
-                                    externalIntegrations: next,
-                                  }));
-                                  showToast('success', 'Removed external integration key.');
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-red-600"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+          {activeSubTab === 'feed' && (
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+              <h2 className="text-base font-semibold">Main Feed</h2>
+              <FeedPreferences workspace />
+            </section>
           )}
-
-          {/* ===================================================================
-              TAB 2: GENERAL & BRANDING SETTINGS
-          =================================================================== */}
           {activeSubTab === 'general' && (
-            <form
-              onSubmit={handleSaveSystemSettingsForm}
-              className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5"
-            >
-              <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Workspace Identity, Branding &amp; Preferences
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Customize your application title, organization branding, default startup module, and real-time sync intervals.
-                </p>
-              </div>
+            <form onSubmit={handleSaveSystemSettingsForm} className="space-y-5">
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-[#0B57D0]" />
+                    <span>Workspace Profile &amp; Identity</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Configure your workspace branding, organization details, and administrator contact.
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Application / Workspace Title
-                  </label>
-                  <input
-                    type="text"
-                    value={sysSettings.workspaceName}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, workspaceName: e.target.value }))
-                    }
-                    placeholder="Workspace Pro"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Organization / Company Name
-                  </label>
-                  <input
-                    type="text"
-                    value={sysSettings.organizationName}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, organizationName: e.target.value }))
-                    }
-                    placeholder="Your Company Name"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Primary Admin Contact Email
-                  </label>
-                  <input
-                    type="email"
-                    value={sysSettings.adminEmail}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, adminEmail: e.target.value }))
-                    }
-                    placeholder="admin@yourdomain.com"
-                    className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Default Module on Startup
-                  </label>
-                  <select
-                    value={sysSettings.defaultLandingModule}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, defaultLandingModule: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    <option value="gmail">Gmail Inbox</option>
-                    <option value="server_mail">Server Mail Inbox</option>
-                    <option value="bulk">Bulk Mail Studio</option>
-                    <option value="docs">Docs</option>
-                    <option value="slides">Slides</option>
-                    <option value="forms">Forms</option>
-                    <option value="meet">Meet</option>
-                    <option value="teams">Teams &amp; Members</option>
-                    <option value="files">File Manager</option>
-                    <option value="cmh_tasks">CMH Tasks</option>
-                    <option value="cmh_projects">CMH Projects</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Default Timezone
-                  </label>
-                  <select
-                    value={sysSettings.timezone}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, timezone: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    <option value="Asia/Dhaka">Asia/Dhaka (GMT+6)</option>
-                    <option value="UTC">UTC (GMT+0)</option>
-                    <option value="America/New_York">America/New_York (EST/EDT)</option>
-                    <option value="Europe/London">Europe/London (GMT/BST)</option>
-                    <option value="Asia/Dubai">Asia/Dubai (GMT+4)</option>
-                    <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Background Mail Sync Interval (Seconds)
-                  </label>
-                  <input
-                    type="number"
-                    min={5}
-                    max={300}
-                    value={sysSettings.autoSyncIntervalSec}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({
-                        ...s,
-                        autoSyncIntervalSec: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Workspace Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={sysSettings.workspaceName}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, workspaceName: e.target.value }))}
+                      placeholder="Workspace Pro"
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Organization / Company
+                    </label>
+                    <input
+                      type="text"
+                      value={sysSettings.organizationName}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, organizationName: e.target.value }))}
+                      placeholder="My Organization"
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Admin Email Address
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={sysSettings.adminEmail}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, adminEmail: e.target.value }))}
+                      placeholder="admin@company.com"
+                      className="w-full px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSavingSys}
-                  className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
-                >
-                  {isSavingSys ? 'Saving...' : 'Save General Settings'}
-                </button>
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[#0B57D0]" />
+                    <span>Regional &amp; System Behavior</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Select your timezone and default landing screen after login.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Default Landing Screen
+                    </label>
+                    <select
+                      value={sysSettings.defaultLandingModule}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, defaultLandingModule: e.target.value }))}
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    >
+                      <option value="main_feed">Main Feed</option>
+                      <option value="overview">Executive Overview</option>
+                      <option value="cmh_tasks">Tasks Management</option>
+                      <option value="cmh_projects">Projects Management</option>
+                      <option value="gmail">Gmail Channel</option>
+                      <option value="server_mail">Server Mail Channel</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Timezone
+                    </label>
+                    <select
+                      value={sysSettings.timezone}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, timezone: e.target.value }))}
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                    >
+                      <option value="Asia/Dhaka">Asia/Dhaka (UTC+06:00)</option>
+                      <option value="UTC">UTC (Coordinated Universal Time)</option>
+                      <option value="America/New_York">America/New_York (EST / EDT)</option>
+                      <option value="Europe/London">Europe/London (GMT / BST)</option>
+                      <option value="Asia/Dubai">Asia/Dubai (UTC+04:00)</option>
+                      <option value="Asia/Singapore">Asia/Singapore (UTC+08:00)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSavingSys}
+                    className="px-5 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                  >
+                    {isSavingSys ? 'Saving...' : 'Save General Settings'}
+                  </button>
+                </div>
               </div>
             </form>
           )}
 
           {/* ===================================================================
-              TAB 3: MAIL ENGINE, SIGNATURES & CUSTOM TABS
+              TAB 2: EMAIL & CHANNELS (Unified Accounts Directory & Clean Modal)
           =================================================================== */}
-          {activeSubTab === 'mail_rules' && (
+          {activeSubTab === 'accounts' && (
             <div className="space-y-6">
-              <form
-                onSubmit={handleSaveSystemSettingsForm}
-                className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5"
-              >
-                <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Mail Engine, Global Signature &amp; Automation Rules
+              {/* Mailbox Overview & Role Summary Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                  <div className="text-[11px] font-medium text-slate-500">Total Mailboxes</div>
+                  <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                    {mailboxesOverview?.totalCount ?? totalConnectedMailboxes} Connected
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                  <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                    <Bot className="w-3.5 h-3.5 text-violet-600" />
+                    <span>System Mail</span>
+                  </div>
+                  <div className="text-xs font-bold text-violet-700 dark:text-violet-400 mt-1 truncate">
+                    {mailboxesOverview?.primarySystemMail ? mailboxesOverview.primarySystemMail.email : 'None (Paused)'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                  <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-[#0B57D0]" />
+                    <span>Admin Recipient</span>
+                  </div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
+                    {mailboxesOverview?.adminRecipient || sysSettings.adminEmail || 'admin@yourdomain.com'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                  <div className="text-[11px] font-medium text-slate-500">General Inboxes</div>
+                  <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                    {mailboxesOverview?.generalCount ?? totalConnectedMailboxes} Active
+                  </div>
+                </div>
+              </div>
+
+              {/* Dedicated System Mail Section */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-violet-200/80 dark:border-violet-900/60 bg-gradient-to-r from-violet-50/40 to-white dark:from-violet-950/20 dark:to-slate-900 shadow-2xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-5 h-5 text-violet-600" />
+                      <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        System Mail (স্বয়ংক্রিয় রোবট ডিসপ্যাচার)
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      প্ল্যাটফর্মের স্বয়ংক্রিয় নোটিফিকেশন, টাস্ক অ্যাসাইনমেন্ট অ্যালার্ট ও মেম্বার ইনভাইটেশনের ডেডিকেটেড সেন্ডার।
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestActiveSystemMail}
+                      disabled={testingActiveSystemMail || !mailboxesOverview?.primarySystemMail}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-violet-300 dark:border-violet-700 hover:bg-violet-100/60 dark:hover:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testingActiveSystemMail ? 'animate-spin' : ''}`} />
+                      <span>Test Connection</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSysType('server_mail');
+                        setSysEmail('');
+                        setSysPassword('');
+                        setSysLabel('System Mail');
+                        setSysSmtpHost('mail.yourdomain.com');
+                        setSysSmtpPort(465);
+                        setSysSmtpSecure(true);
+                        setSysBanner(null);
+                        setShowAddSystemMailModal(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Add System Mail</span>
+                    </button>
+                  </div>
+                </div>
+
+                {activeSystemMailTestResult && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                      activeSystemMailTestResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800'
+                        : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/40 dark:border-red-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {activeSystemMailTestResult.ok ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      )}
+                      <span>{activeSystemMailTestResult.message}</span>
+                      {activeSystemMailTestResult.host && (
+                        <span className="font-mono text-[10px] bg-white/60 dark:bg-black/30 px-1.5 py-0.5 rounded">
+                          {activeSystemMailTestResult.host}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSystemMailTestResult(null)}
+                      className="text-xs font-bold underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
+                <div className="p-4 rounded-xl border border-violet-100 dark:border-violet-900/40 bg-white/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-violet-300 flex items-center justify-center font-bold">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {mailboxesOverview?.primarySystemMail
+                            ? mailboxesOverview.primarySystemMail.label
+                            : 'No Primary System Mail Configured'}
+                        </span>
+                        {mailboxesOverview?.primarySystemMail && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
+                            Active Dispatcher
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                        {mailboxesOverview?.primarySystemMail
+                          ? `${mailboxesOverview.primarySystemMail.email} · SMTP: ${mailboxesOverview.primarySystemMail.host}`
+                          : 'Click "+ Add System Mail" to register a dedicated Gmail or Server Mail dispatcher.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {mailboxesOverview?.primarySystemMail && (
+                    <div className="text-right">
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 justify-end">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Ready &amp; Verified</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Type: {mailboxesOverview.primarySystemMail.type === 'gmail' ? 'Gmail App Password' : 'Server SMTP'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Unified Connected Accounts Directory Card */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-[#0B57D0]" />
+                      <span>Connected Mailboxes &amp; Communication Channels</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Unified mailbox hub for your official Gmail and custom domain email accounts.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetGmailForm();
+                      resetServerForm();
+                      setAccountType('gmail');
+                      setShowAccountModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Connect Mailbox</span>
+                  </button>
+                </div>
+
+                {/* Empty State */}
+                {totalConnectedMailboxes === 0 ? (
+                  <div className="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-2">
+                    <Mail className="w-8 h-8 text-slate-400 mx-auto" />
+                    <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      No Mailboxes Connected Yet
+                    </h3>
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                      Click "+ Connect Mailbox" to connect your Google Gmail (via App Password) or your custom domain server mail (cPanel/IMAP).
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 pt-1">
+                    {/* Gmail Accounts */}
+                    {gmailAccounts.map((acc) => {
+                      const isCurrent = activeGmailEmail === acc.email;
+                      const overviewEntry = mailboxesOverview?.mailboxes.find(
+                        (m) => m.type === 'gmail' && (m.id === acc.id || m.email === acc.email)
+                      );
+                      const currentRole = overviewEntry?.role || (acc as any).role || 'general';
+                      const isPrimarySys = overviewEntry?.isSystemPrimary || (acc as any).isSystemPrimary;
+
+                      return (
+                        <div
+                          key={acc.id || acc.email}
+                          className={`flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border transition-all ${
+                            isCurrent
+                              ? 'border-[#0B57D0]/60 bg-blue-50/40 dark:bg-blue-950/20 shadow-2xs'
+                              : 'border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-[#EA4335] shrink-0">
+                              <Mail className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                                <span className="truncate">{acc.displayName || 'Gmail'}</span>
+                                {isPrimarySys && (
+                                  <span className="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 text-[10px] font-bold">
+                                    Primary System Mail
+                                  </span>
+                                )}
+                                {isCurrent ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 text-[10px] font-bold">
+                                    Default Active
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-semibold">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-500 truncate mt-0.5">
+                                {acc.email} · Google IMAP:993
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Role Selector */}
+                            <select
+                              value={currentRole}
+                              onChange={(e) =>
+                                handleUpdateMailboxRole(
+                                  'gmail',
+                                  acc.id || acc.email,
+                                  e.target.value,
+                                  e.target.value === 'system' && !isPrimarySys
+                                )
+                              }
+                              className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium focus:outline-none"
+                              title="Assign Purpose/Role to this Mailbox"
+                            >
+                              <option value="general">📬 General Inbox</option>
+                              <option value="system">🤖 System Mail</option>
+                              <option value="admin">🛡️ Admin Alert</option>
+                              <option value="marketing">📢 Marketing</option>
+                            </select>
+
+                            {currentRole === 'system' && !isPrimarySys && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateMailboxRole('gmail', acc.id || acc.email, 'system', true)
+                                }
+                                className="px-2 py-1 rounded-lg bg-violet-600 text-white text-[10px] font-semibold cursor-pointer"
+                              >
+                                Set Primary
+                              </button>
+                            )}
+
+                            {!isCurrent && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const switched = switchActiveGmailAccount(acc.email);
+                                  if (switched) {
+                                    onGmailAccountsChanged(gmailAccounts, switched.email);
+                                    showToast('success', `Default Gmail switched to ${switched.email}`);
+                                  }
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#0B57D0] text-white text-[11px] font-semibold cursor-pointer"
+                              >
+                                Set Default
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                switchActiveGmailAccount(acc.email);
+                                onGmailAccountsChanged(gmailAccounts, acc.email);
+                                onOpenModule('gmail');
+                              }}
+                              className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold hover:bg-slate-50 cursor-pointer"
+                            >
+                              Inbox
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditGmailAccount(acc)}
+                              className="p-1.5 text-slate-500 hover:text-[#0B57D0] cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const remaining = await removeGmailAccount(acc.id || acc.email);
+                                onGmailAccountsChanged(remaining, remaining[0]?.email || null);
+                                showToast('success', `Removed ${acc.email}`);
+                                loadMailboxesOverview();
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-600 cursor-pointer"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Server Mail Accounts */}
+                    {serverAccounts.map((acc) => {
+                      const isCurrent = activeServerAccountId === acc.id;
+                      const overviewEntry = mailboxesOverview?.mailboxes.find(
+                        (m) => m.type === 'server_mail' && (m.id === acc.id || m.email === acc.email)
+                      );
+                      const currentRole = overviewEntry?.role || acc.role || 'general';
+                      const isPrimarySys = overviewEntry?.isSystemPrimary || acc.isSystemPrimary;
+
+                      return (
+                        <div
+                          key={acc.id}
+                          className={`flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border transition-all ${
+                            isCurrent
+                              ? 'border-[#0B57D0]/60 bg-blue-50/40 dark:bg-blue-950/20 shadow-2xs'
+                              : 'border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[#0B57D0] shrink-0">
+                              <Server className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                                <span className="truncate">{acc.label}</span>
+                                {isPrimarySys && (
+                                  <span className="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 text-[10px] font-bold">
+                                    Primary System Mail
+                                  </span>
+                                )}
+                                {isCurrent ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 text-[10px] font-bold">
+                                    Default Active
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-semibold">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-500 truncate mt-0.5">
+                                {acc.email} · {acc.imapHost}:{acc.imapPort}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Role Selector */}
+                            <select
+                              value={currentRole}
+                              onChange={(e) =>
+                                handleUpdateMailboxRole(
+                                  'server_mail',
+                                  acc.id,
+                                  e.target.value,
+                                  e.target.value === 'system' && !isPrimarySys
+                                )
+                              }
+                              className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium focus:outline-none"
+                              title="Assign Purpose/Role to this Mailbox"
+                            >
+                              <option value="general">📬 General Inbox</option>
+                              <option value="system">🤖 System Mail</option>
+                              <option value="admin">🛡️ Admin Alert</option>
+                              <option value="marketing">📢 Marketing</option>
+                            </select>
+
+                            {currentRole === 'system' && !isPrimarySys && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateMailboxRole('server_mail', acc.id, 'system', true)
+                                }
+                                className="px-2 py-1 rounded-lg bg-violet-600 text-white text-[10px] font-semibold cursor-pointer"
+                              >
+                                Set Primary
+                              </button>
+                            )}
+
+                            {!isCurrent && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectServerAccount(acc.id);
+                                  showToast('success', `Default Server Mail set to ${acc.email}`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#0B57D0] text-white text-[11px] font-semibold cursor-pointer"
+                              >
+                                Set Default
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSelectServerAccount(acc.id);
+                                onOpenModule('server_mail');
+                              }}
+                              className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold hover:bg-slate-50 cursor-pointer"
+                            >
+                              Inbox
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditServerMailAccount(acc)}
+                              className="p-1.5 text-slate-500 hover:text-[#0B57D0] cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const remaining = await deleteServerMailAccount(acc.id);
+                                onServerAccountsChanged(remaining, remaining[0]?.id || undefined);
+                                showToast('success', `Removed ${acc.email}`);
+                                loadMailboxesOverview();
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-600 cursor-pointer"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Outgoing Mail Defaults & Signatures */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-[#0B57D0]" />
+                    <span>Outgoing Email Signature &amp; Send Limits</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Configure default email signatures, reply-to headers, bulk mail throttling, and CMH notification delivery rules.
+                    Customize your global email signature and daily outbound dispatch parameters.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Default Reply-To Address
-                    </label>
-                    <input
-                      type="email"
-                      value={sysSettings.defaultReplyTo}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({ ...s, defaultReplyTo: e.target.value }))
-                      }
-                      placeholder="reply@yourdomain.com"
-                      className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Bulk Mail Throttle Delay (ms)
-                    </label>
-                    <input
-                      type="number"
-                      min={100}
-                      max={10000}
-                      value={sysSettings.bulkDelayMs}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({ ...s, bulkDelayMs: Number(e.target.value) }))
-                      }
-                      className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Daily Outgoing Send Limit
-                    </label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={50000}
-                      value={sysSettings.dailySendLimit}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({ ...s, dailySendLimit: Number(e.target.value) }))
-                      }
-                      className="w-full px-3 py-2 text-sm font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                </div>
+                <form onSubmit={handleSaveSystemSettingsForm} className="space-y-4 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Default Reply-To Address
+                      </label>
+                      <input
+                        type="email"
+                        value={sysSettings.defaultReplyTo}
+                        onChange={(e) => setSysSettings((s) => ({ ...s, defaultReplyTo: e.target.value }))}
+                        placeholder="replies@company.com"
+                        className="w-full px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
 
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Daily Outbound Send Limit
+                      </label>
+                      <input
+                        type="number"
+                        value={sysSettings.dailySendLimit}
+                        onChange={(e) => setSysSettings((s) => ({ ...s, dailySendLimit: Number(e.target.value) }))}
+                        placeholder="500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      HTML Email Signature
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={sysSettings.defaultSignatureHtml}
+                      onChange={(e) => setSysSettings((s) => ({ ...s, defaultSignatureHtml: e.target.value }))}
+                      placeholder="<p>Best regards,<br/><strong>Team</strong></p>"
+                      className="w-full px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      disabled={isSavingSys}
+                      className="px-5 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                    >
+                      {isSavingSys ? 'Saving...' : 'Save Signature & Defaults'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Custom Mail Filter Tabs */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Global Email Signature (Appended to outgoing messages)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={sysSettings.defaultSignatureHtml}
-                    onChange={(e) =>
-                      setSysSettings((s) => ({ ...s, defaultSignatureHtml: e.target.value }))
-                    }
-                    placeholder="Best regards,&#10;Your Name | Organization"
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={sysSettings.autoSaveAttachmentsToFiles}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({
-                          ...s,
-                          autoSaveAttachmentsToFiles: e.target.checked,
-                        }))
-                      }
-                      className="rounded accent-[#0B57D0]"
-                    />
-                    <span>Automatically index email attachments in Server File Manager</span>
-                  </label>
-
-                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={cmhRules.injectIntoPrimaryInbox}
-                      onChange={(e) =>
-                        setCmhRules((r) => ({ ...r, injectIntoPrimaryInbox: e.target.checked }))
-                      }
-                      className="rounded accent-[#0B57D0]"
-                    />
-                    <span>Deliver Form &amp; Task submissions directly to Primary Inbox</span>
-                  </label>
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isSavingSys}
-                    className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
-                  >
-                    {isSavingSys ? 'Saving...' : 'Save Mail & Signature Settings'}
-                  </button>
-                </div>
-              </form>
-
-              {/* Custom Inbox Filter Tabs Manager */}
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Custom Inbox Filter Tabs ({customTabs.length})
-                  </h3>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#0B57D0]" />
+                    <span>Custom Mail Navigation Tabs</span>
+                  </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Create custom filter tabs that appear across your Inbox bar (e.g., Invoices, Clients, Urgent).
+                    Create dynamic filter tabs in Gmail/Server Mail (e.g. "Invoices", "VIP", "Support").
                   </p>
                 </div>
 
@@ -1889,7 +1567,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onCustomTabsChanged(created);
                     setNewTabName('');
                     setNewTabQuery('');
-                    showToast('success', 'Added custom mail tab!');
+                    showToast('success', 'Added custom mail tab.');
                   }}
                   className="grid grid-cols-1 sm:grid-cols-3 gap-3"
                 >
@@ -1898,36 +1576,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     required
                     value={newTabName}
                     onChange={(e) => setNewTabName(e.target.value)}
-                    placeholder="Tab Name (e.g. Invoices)"
-                    className="px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    placeholder="Tab Label (e.g. Invoices)"
+                    className="px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                   <input
                     type="text"
                     required
                     value={newTabQuery}
                     onChange={(e) => setNewTabQuery(e.target.value)}
-                    placeholder="Filter Query (e.g. subject:invoice)"
-                    className="px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    placeholder="Search Query (e.g. subject:invoice)"
+                    className="px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-[#0B57D0] text-white text-xs font-semibold hover:bg-blue-700"
+                    className="px-4 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer"
                   >
-                    + Add Custom Tab
+                    + Add Tab
                   </button>
                 </form>
 
                 {customTabs.length > 0 && (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden mt-3">
                     {customTabs.map((tab) => (
-                      <div
-                        key={tab.id}
-                        className="flex items-center justify-between px-4 py-2.5 text-xs"
-                      >
+                      <div key={tab.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
                         <div>
-                          <span className="font-bold text-slate-900 dark:text-slate-100">
-                            {tab.name}
-                          </span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100">{tab.name}</span>
                           <span className="ml-2 font-mono text-slate-500">{tab.query}</span>
                         </div>
                         <button
@@ -1937,9 +1610,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             onCustomTabsChanged(updated);
                             showToast('success', `Removed tab "${tab.name}"`);
                           }}
-                          className="p-1 text-slate-400 hover:text-red-600"
+                          className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
@@ -1950,309 +1623,214 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
 
           {/* ===================================================================
-              TAB 4: PURE POSTGRESQL ENGINE, PRISMA SCHEMA & DECOUPLED STORAGE
+              TAB 3: NOTIFICATIONS & RULES
           =================================================================== */}
-          {activeSubTab === 'database' && (
+          {activeSubTab === 'mail_rules' && <WorkspaceMailSettings />}
+          {activeSubTab === 'mail_rules' && (
             <div className="space-y-6">
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <Database className="w-4 h-4 text-emerald-600" />
-                      <span>PostgreSQL Connection (`DATABASE_URL`) &amp; Prisma ORM</span>
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      100% backed by standard PostgreSQL ({pgConfig.host}:{pgConfig.port}/{pgConfig.database}). File binaries and external S3/R2/CDN assets remain decoupled from database tables.
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                      pgConfig.enabled
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {pgConfig.enabled ? 'PostgreSQL Connected' : 'Setup Pending'}
-                  </span>
-                </div>
-
-                {/* Standard DATABASE_URL Connection String Input */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    PostgreSQL Connection URL (`DATABASE_URL`)
-                  </label>
-                  <input
-                    type="text"
-                    value={pgConfig.connectionString || ''}
-                    onChange={(e) =>
-                      setPgConfig((p) => ({ ...p, connectionString: e.target.value }))
-                    }
-                    placeholder="postgresql://postgres:password@localhost:5432/workspace_pro?schema=public"
-                    className="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Works with any standard PostgreSQL server (VPS Postgres, Docker, Neon, Supabase, Railway). Updating this updates `.env` and runs Prisma `db push`.
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <BellRing className="w-4 h-4 text-[#0B57D0]" />
+                    <span>Workspace Notification Rules</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Control automated activity notifications and admin alert triggers.
                   </p>
                 </div>
 
-                {/* Structured Host / Port / DB / User / Password Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Host
-                    </label>
-                    <input
-                      type="text"
-                      value={pgConfig.host}
-                      onChange={(e) => setPgConfig((p) => ({ ...p, host: e.target.value }))}
-                      placeholder="localhost"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Port
-                    </label>
-                    <input
-                      type="number"
-                      value={pgConfig.port}
-                      onChange={(e) =>
-                        setPgConfig((p) => ({ ...p, port: Number(e.target.value) || 5432 }))
-                      }
-                      placeholder="5432"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Database Name
-                    </label>
-                    <input
-                      type="text"
-                      value={pgConfig.database}
-                      onChange={(e) => setPgConfig((p) => ({ ...p, database: e.target.value }))}
-                      placeholder="workspace_pro"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={pgConfig.user}
-                      onChange={(e) => setPgConfig((p) => ({ ...p, user: e.target.value }))}
-                      placeholder="postgres"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      Password
-                    </label>
-                    <input
-                      type="password"
-                      value={pgPassword}
-                      onChange={(e) => setPgPassword(e.target.value)}
-                      placeholder="Leave blank if using URL above"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div className="flex items-end pb-1.5">
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <form onSubmit={handleSaveSystemSettingsForm} className="space-y-4 pt-1">
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <input
                         type="checkbox"
-                        checked={pgConfig.ssl}
-                        onChange={(e) => setPgConfig((p) => ({ ...p, ssl: e.target.checked }))}
-                        className="rounded accent-[#0B57D0]"
+                        checked={cmhRules.notifyOnTaskActivity}
+                        onChange={(e) => setCmhRules((r) => ({ ...r, notifyOnTaskActivity: e.target.checked }))}
+                        className="rounded text-[#0B57D0] focus:ring-0"
                       />
-                      <span>Require SSL (`sslmode=require`)</span>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Task Progress &amp; Submission Alerts
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Receive notifications when a team member submits updates or changes task status.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <input
+                        type="checkbox"
+                        checked={cmhRules.notifyOnFormSubmit}
+                        onChange={(e) => setCmhRules((r) => ({ ...r, notifyOnFormSubmit: e.target.checked }))}
+                        className="rounded text-[#0B57D0] focus:ring-0"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Form Submission Notifications
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Notify workspace admin immediately when an internal or public form is submitted.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <input
+                        type="checkbox"
+                        checked={cmhRules.notifyOnProjectActivity}
+                        onChange={(e) => setCmhRules((r) => ({ ...r, notifyOnProjectActivity: e.target.checked }))}
+                        className="rounded text-[#0B57D0] focus:ring-0"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Project Activity &amp; Milestone Alerts
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Receive notifications when milestones or deadlines on projects are updated.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <input
+                        type="checkbox"
+                        checked={sysSettings.autoSaveAttachmentsToFiles}
+                        onChange={(e) => setSysSettings((s) => ({ ...s, autoSaveAttachmentsToFiles: e.target.checked }))}
+                        className="rounded text-[#0B57D0] focus:ring-0"
+                      />
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Auto-Save Email Attachments to File Manager
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Automatically mirror incoming email attachments into the workspace File Manager drive.
+                        </div>
+                      </div>
                     </label>
                   </div>
-                </div>
 
-                {pgConfig.statusMessage && (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-center justify-between gap-3">
-                    <span>{pgConfig.statusMessage}</span>
-                    {pgConfig.lastMigratedAt && (
-                      <span className="text-[11px] text-slate-500 shrink-0">
-                        Last synced: {pgConfig.lastMigratedAt}
-                      </span>
-                    )}
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingSys}
+                      className="px-5 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                    >
+                      {isSavingSys ? 'Saving...' : 'Save Notification Rules'}
+                    </button>
                   </div>
-                )}
-
-                {pgMigrationFeedback && (
-                  <div
-                    className={`p-3.5 rounded-xl border text-xs font-medium whitespace-pre-wrap ${
-                      pgMigrationFeedback.ok
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                        : 'bg-amber-50 border-amber-200 text-amber-800'
-                    }`}
-                  >
-                    {pgMigrationFeedback.message}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    disabled={isSavingPg}
-                    onClick={() => handleSavePostgresAndMigrate(false)}
-                    className="px-4 py-2 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
-                  >
-                    Save Config
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSavingPg}
-                    onClick={() => handleSavePostgresAndMigrate(true)}
-                    className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer"
-                  >
-                    {isSavingPg ? 'Connecting & Pushing Schema...' : 'Test & Push Prisma Schema'}
-                  </button>
-                </div>
+                </form>
               </div>
+            </div>
+          )}
 
-              {/* VPS Smart Storage & Zero Browser Cache Monitor */}
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          {/* ===================================================================
+              TAB 4: STORAGE & DATA BACKUP (Clean & Free of Raw DB Credentials)
+          =================================================================== */}
+          {activeSubTab === 'security' && (
+            <section className="space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800 sm:p-6">
+              <h2 className="text-base font-semibold">Access &amp; Security</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Manage workspace roles, member access and active sessions.</p>
+              <button type="button" onClick={onOpenAccessSettings} className="rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800">Open Access &amp; Users</button>
+            </section>
+          )}
+          {activeSubTab === 'database' && (
+            <div className="space-y-6">
+              {/* PostgreSQL Engine Active Status Pill */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-700 dark:text-emerald-300">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-[#0B57D0]" />
-                      <span>VPS Disk Storage &amp; Zero Browser Cache</span>
+                    <h3 className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                      PostgreSQL Relational Engine: Active &amp; Healthy
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Binary uploads, thumbnails, and file revisions persist on VPS disk outside PostgreSQL. Browser caching is strictly disabled (`no-store`).
+                    <p className="text-[11px] text-emerald-800/80 dark:text-emerald-400 mt-0.5">
+                      All workspace tables, users, tasks, and system configurations are securely persisted. Database connection parameters are protected via server environment.
                     </p>
                   </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
+                  System Ready
+                </span>
+              </div>
+
+              {/* VPS / Persistent Storage Diagnostics */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-[#0B57D0]" />
+                      <span>Workspace Storage &amp; Cache Diagnostics</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Monitor disk utilization for uploads, generated previews, and cache.
+                    </p>
+                  </div>
+
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Browser Cache: Disabled
-                    </span>
-                    {vpsStorage && (
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                          vpsStorage.isEphemeralTmp
-                            ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-blue-50 text-[#0B57D0] border-blue-200'
-                        }`}
-                      >
-                        {vpsStorage.isEphemeralTmp ? 'Temp Fallback' : 'Persistent VPS Disk'}
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      disabled={isCleaningStorage}
+                      onClick={() => handleRunSmartStorageCleanup(30)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{isCleaningStorage ? 'Cleaning...' : 'Clean Cache & Temp Files'}</span>
+                    </button>
                   </div>
                 </div>
 
-                {vpsStorage ? (
-                  <>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-xs flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-mono text-slate-700 dark:text-slate-200 break-all">
-                        Path: {vpsStorage.storageBasePath}
-                      </span>
-                      {vpsStorage.diskTotalBytes > 0 && (
-                        <span className="text-slate-600 dark:text-slate-300 font-semibold shrink-0">
-                          VPS Disk Free: {formatBytes(vpsStorage.diskFreeBytes)} /{' '}
-                          {formatBytes(vpsStorage.diskTotalBytes)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
-                      {[
-                        {
-                          label: 'Total Stored',
-                          value: formatBytes(vpsStorage.totalUsedBytes),
-                          sub: `${vpsStorage.activeFilesCount} active files`,
-                        },
-                        {
-                          label: 'Uploads Folder',
-                          value: formatBytes(vpsStorage.uploadsBytes),
-                          sub: 'Auto-optimized',
-                        },
-                        {
-                          label: 'Revisions (.versions)',
-                          value: formatBytes(vpsStorage.versionsBytes),
-                          sub: `${vpsStorage.versionsCount} snapshots`,
-                        },
-                        {
-                          label: 'Thumbnails (.thumbs)',
-                          value: formatBytes(vpsStorage.thumbsBytes),
-                          sub: 'WebP previews',
-                        },
-                        {
-                          label: 'Trash Bin',
-                          value: formatBytes(vpsStorage.trashedBytes),
-                          sub: `${vpsStorage.trashedFilesCount} trashed`,
-                        },
-                        {
-                          label: 'Orphan Bytes',
-                          value: formatBytes(vpsStorage.orphanBytes),
-                          sub: `${vpsStorage.orphanFilesCount} unreferenced`,
-                        },
-                      ].map((card) => (
-                        <div
-                          key={card.label}
-                          className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800"
-                        >
-                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                            {card.value}
-                          </div>
-                          <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-0.5">
-                            {card.label}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{card.sub}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                      <p className="text-[11px] text-slate-500">
-                        Smart Cleanup safely deletes unreferenced orphan disk files and purges trashed files older than 30 days.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              setVpsStorage(await fetchVpsStorageDiagnostics());
-                              showToast('success', 'Storage metrics refreshed.');
-                            } catch (err: any) {
-                              showToast('error', err?.message || 'Unable to refresh storage metrics.');
-                            }
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Refresh</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isCleaningStorage}
-                          onClick={() => handleRunSmartStorageCleanup(30)}
-                          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#0B57D0] hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold cursor-pointer"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>{isCleaningStorage ? 'Cleaning...' : 'Run Smart Cleanup'}</span>
-                        </button>
+                {vpsDiag ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-500">Uploads &amp; Files</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
+                        {formatBytes(vpsDiag.uploadsBytes)}
                       </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{vpsDiag.activeFilesCount} active files</div>
                     </div>
-                  </>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-500">Thumbnails Cache</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
+                        {formatBytes(vpsDiag.thumbsBytes)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Image previews</div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-500">Trash Bin</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
+                        {formatBytes(vpsDiag.trashedBytes)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{vpsDiag.trashedFilesCount} pending purge</div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] font-semibold text-slate-500">Total Storage Used</div>
+                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                        {formatBytes(vpsDiag.totalUsedBytes)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Persistent Storage</div>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="text-xs text-slate-500">Loading VPS storage diagnostics...</div>
+                  <div className="text-xs text-slate-500">Loading storage metrics...</div>
                 )}
               </div>
 
-              {/* Portable JSON Backup & Restore + Prisma Schema Viewer */}
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
+              {/* Data Backup & Restore Hub */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Prisma Schema (`prisma/schema.prisma`) &amp; Full JSON Backup
-                    </h3>
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Download className="w-4 h-4 text-[#0B57D0]" />
+                      <span>One-Click Relational Data Backup &amp; Restore</span>
+                    </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Inspect PostgreSQL models and indexes, or export/restore a complete JSON snapshot across servers.
+                      Export a complete JSON snapshot of workspace records (users, tasks, projects, forms) or restore from an existing backup.
                     </p>
                   </div>
 
@@ -2260,7 +1838,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={handleExportBackup}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Export Backup JSON</span>
@@ -2276,217 +1854,537 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => backupFileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Restore Backup JSON</span>
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
 
-                <div className="flex items-center justify-between pt-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSchemaViewMode('prisma')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                        schemaViewMode === 'prisma'
-                          ? 'bg-[#0B57D0] text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      prisma/schema.prisma
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSchemaViewMode('sql')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                        schemaViewMode === 'sql'
-                          ? 'bg-[#0B57D0] text-white'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      Connection Info
-                    </button>
-                  </div>
+        </div>
+      </div>
+
+      {/* =======================================================================
+          FOCUSED MODAL: ADD / EDIT MAILBOX DIALOG (Opens only on user request)
+      ======================================================================= */}
+      {showAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-[#0B57D0]" />
+                  <span>
+                    {gmailEditingId || serverEditingId ? 'Edit Mailbox Account' : 'Connect New Mailbox'}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Select your provider and configure your connection credentials.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAccountModal(false)}
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Provider Type Toggle (Only if creating new) */}
+            {!gmailEditingId && !serverEditingId && (
+              <div className="px-5 pt-4">
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('gmail')}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      accountType === 'gmail'
+                        ? 'bg-white dark:bg-slate-900 text-[#EA4335] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Google Gmail</span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        schemaViewMode === 'prisma' ? prismaSchemaText : sqlSchemaText
-                      );
-                      setCopiedSchema(true);
-                      setTimeout(() => setCopiedSchema(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                    onClick={() => setAccountType('server_mail')}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      accountType === 'server_mail'
+                        ? 'bg-white dark:bg-slate-900 text-[#0B57D0] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
                   >
-                    {copiedSchema ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                      </>
-                    )}
+                    <Server className="w-3.5 h-3.5" />
+                    <span>Domain / Server Mail</span>
                   </button>
                 </div>
-
-                <pre className="p-4 rounded-xl bg-slate-950 text-slate-100 text-[11px] font-mono overflow-x-auto max-h-80 leading-relaxed">
-                  {schemaViewMode === 'prisma'
-                    ? prismaSchemaText || '// prisma/schema.prisma ready'
-                    : sqlSchemaText || '// PostgreSQL via Prisma ORM'}
-                </pre>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* ===================================================================
-              TAB 5: SECURITY, WEBHOOKS & ENGINE DIAGNOSTICS
-          =================================================================== */}
-          {activeSubTab === 'security' && (
-            <div className="space-y-6">
-              <form
-                onSubmit={handleSaveSystemSettingsForm}
-                className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5"
-              >
-                <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Security Vault, Public Access &amp; Webhook Automation</span>
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Manage public portal access permissions, webhook signing keys, and standalone engine security.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Modal Body / Form Container */}
+            <div className="p-5 overflow-y-auto space-y-4">
+              {/* --- GMAIL FORM --- */}
+              {accountType === 'gmail' && (
+                <form onSubmit={handleSaveGmail} className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Incoming Webhook Secret Key
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={sysSettings.incomingWebhookSecret}
-                        className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSysSettings((s) => ({
-                            ...s,
-                            incomingWebhookSecret: `whsec_${Math.random()
-                              .toString(36)
-                              .slice(2, 14)}${Math.random().toString(36).slice(2, 10)}`,
-                          }))
-                        }
-                        className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold hover:bg-slate-100"
-                      >
-                        Regenerate
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Outgoing Webhook Notification URL
+                      Display Label
                     </label>
                     <input
                       type="text"
-                      value={sysSettings.outgoingWebhookUrl}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({ ...s, outgoingWebhookUrl: e.target.value }))
-                      }
-                      placeholder="https://your-server.com/api/webhook-receiver"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      value={gmailLabel}
+                      onChange={(e) => setGmailLabel(e.target.value)}
+                      placeholder="e.g. Official Gmail"
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Gmail Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={gmailEmail}
+                      onChange={(e) => setGmailEmail(e.target.value)}
+                      placeholder="yourname@gmail.com"
+                      className="w-full px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      {gmailEditingId ? 'Google App Password (leave blank to keep current)' : 'Google App Password *'}
+                    </label>
+                    <input
+                      type="password"
+                      required={!gmailEditingId}
+                      value={gmailPassword}
+                      onChange={(e) => setGmailPassword(e.target.value)}
+                      placeholder="16-character Google App Password"
+                      className="w-full px-3.5 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Generate from myaccount.google.com/apppasswords with 2-Step Verification enabled.
+                    </p>
+                  </div>
+
+                  {gmailVerifyResult && (
+                    <div
+                      className={`p-3 rounded-xl text-xs font-medium ${
+                        gmailVerifyResult.ok
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}
+                    >
+                      {gmailVerifyResult.message}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      disabled={isVerifyingGmail}
+                      onClick={handleVerifyGmail}
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+                    >
+                      {isVerifyingGmail ? 'Testing...' : 'Test Connection'}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountModal(false)}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingGmail}
+                        className="px-4 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                      >
+                        {isSavingGmail ? 'Saving...' : 'Save &amp; Connect'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+
+              {/* --- SERVER MAIL FORM --- */}
+              {accountType === 'server_mail' && (
+                <form onSubmit={handleSaveServerMail} className="space-y-4">
+                  {/* Preset quick buttons */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 mb-1.5">
+                      Quick Presets:
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SMTP_RELAY_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setServerImapHost(preset.imapHost);
+                            setServerImapPort(preset.imapPort);
+                            setServerSmtpHost(preset.smtpHost);
+                            setServerSmtpPort(preset.smtpPort);
+                            showToast('success', `Applied preset: ${preset.name}`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer"
+                        >
+                          {preset.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Account Label
+                      </label>
+                      <input
+                        type="text"
+                        value={serverLabel}
+                        onChange={(e) => setServerLabel(e.target.value)}
+                        placeholder="e.g. Support cPanel"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={serverEmail}
+                        onChange={(e) => setServerEmail(e.target.value)}
+                        placeholder="contact@yourdomain.com"
+                        className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Username (default email)
+                      </label>
+                      <input
+                        type="text"
+                        value={serverUsername}
+                        onChange={(e) => setServerUsername(e.target.value)}
+                        placeholder="contact@yourdomain.com"
+                        className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        {serverEditingId ? 'Password (leave blank to keep current)' : 'Password *'}
+                      </label>
+                      <input
+                        type="password"
+                        required={!serverEditingId}
+                        value={serverPassword}
+                        onChange={(e) => setServerPassword(e.target.value)}
+                        placeholder="Mailbox password"
+                        className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        IMAP Host &amp; Port *
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={serverImapHost}
+                          onChange={(e) => setServerImapHost(e.target.value)}
+                          placeholder="mail.yourdomain.com"
+                          className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="number"
+                          value={serverImapPort}
+                          onChange={(e) => setServerImapPort(Number(e.target.value))}
+                          placeholder="993"
+                          className="w-16 px-2 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        SMTP Host &amp; Port *
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={serverSmtpHost}
+                          onChange={(e) => setServerSmtpHost(e.target.value)}
+                          placeholder="mail.yourdomain.com"
+                          className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="number"
+                          value={serverSmtpPort}
+                          onChange={(e) => setServerSmtpPort(Number(e.target.value))}
+                          placeholder="465"
+                          className="w-16 px-2 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {serverVerifyResult && (
+                    <div
+                      className={`p-3 rounded-xl text-xs font-medium ${
+                        serverVerifyResult.ok
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}
+                    >
+                      {serverVerifyResult.ok ? 'Server connection verified!' : (serverVerifyResult.imapMessage || serverVerifyResult.smtpMessage || 'Verification failed')}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      disabled={isVerifyingServer}
+                      onClick={handleVerifyServerMail}
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+                    >
+                      {isVerifyingServer ? 'Testing...' : 'Test Connection'}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountModal(false)}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingServer}
+                        className="px-4 py-1.5 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 cursor-pointer"
+                      >
+                        {isSavingServer ? 'Saving...' : 'Save &amp; Connect'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          ADD DEDICATED SYSTEM MAIL MODAL (Clean, Slim & Modern)
+      ===================================================================== */}
+      {showAddSystemMailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-violet-50/40 dark:bg-violet-950/20">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-violet-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Add Dedicated System Mail
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    স্বয়ংক্রিয় টাস্ক নোটিফিকেশন, ইনভাইটেশন ও অ্যালার্ট পাঠানোর জন্য
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddSystemMailModal(false)}
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Provider Type Switcher */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSysType('server_mail');
+                    setSysSmtpHost('mail.yourdomain.com');
+                    setSysSmtpPort(465);
+                    setSysSmtpSecure(true);
+                  }}
+                  className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    sysType === 'server_mail'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <Server className="w-3.5 h-3.5" />
+                  <span>Custom Server SMTP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSysType('gmail');
+                    setSysSmtpHost('smtp.gmail.com');
+                    setSysSmtpPort(465);
+                    setSysSmtpSecure(true);
+                  }}
+                  className={`py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    sysType === 'gmail'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <Mail className="w-3.5 h-3.5 text-[#EA4335]" />
+                  <span>Google Gmail</span>
+                </button>
+              </div>
+
+              {sysBanner && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                    sysBanner.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}
+                >
+                  {sysBanner.ok ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{sysBanner.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleAddSystemMailSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    System Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={sysEmail}
+                    onChange={(e) => setSysEmail(e.target.value)}
+                    placeholder={
+                      sysType === 'gmail'
+                        ? 'notifications.workspace@gmail.com'
+                        : 'system@yourcompany.com'
+                    }
+                    className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:border-violet-600"
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={sysSettings.enablePublicForms}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({ ...s, enablePublicForms: e.target.checked }))
-                      }
-                      className="rounded accent-[#0B57D0]"
-                    />
-                    <span>Allow Public Shareable Form Links (?form=...)</span>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Sender Display Name
                   </label>
-
-                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={sysSettings.enablePublicCmhPortal}
-                      onChange={(e) =>
-                        setSysSettings((s) => ({
-                          ...s,
-                          enablePublicCmhPortal: e.target.checked,
-                        }))
-                      }
-                      className="rounded accent-[#0B57D0]"
-                    />
-                    <span>Allow Public CMH Task/Project Portal Links (?cmh=...)</span>
-                  </label>
+                  <input
+                    type="text"
+                    value={sysLabel}
+                    onChange={(e) => setSysLabel(e.target.value)}
+                    placeholder="Workspace Pro System"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:border-violet-600"
+                  />
                 </div>
 
-                <div className="flex justify-end">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    {sysType === 'gmail' ? '16-Character Google App Password *' : 'SMTP Password *'}
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={sysPassword}
+                    onChange={(e) => setSysPassword(e.target.value)}
+                    placeholder="••••••••••••••••"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:border-violet-600"
+                  />
+                  {sysType === 'gmail' && (
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Use a Google Account App Password (requires 2-Step Verification enabled).
+                    </p>
+                  )}
+                </div>
+
+                {sysType === 'server_mail' && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        SMTP Host
+                      </label>
+                      <input
+                        type="text"
+                        value={sysSmtpHost}
+                        onChange={(e) => setSysSmtpHost(e.target.value)}
+                        placeholder="mail.yourdomain.com"
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        SMTP Port
+                      </label>
+                      <input
+                        type="number"
+                        value={sysSmtpPort}
+                        onChange={(e) => setSysSmtpPort(Number(e.target.value))}
+                        className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSystemMailModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
+                  >
+                    Cancel
+                  </button>
                   <button
                     type="submit"
-                    disabled={isSavingSys}
-                    className="px-5 py-2 rounded-full bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold"
+                    disabled={sysSaving}
+                    className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-xs disabled:opacity-60 transition-colors"
                   >
-                    {isSavingSys ? 'Saving...' : 'Save Security Settings'}
+                    {sysSaving ? 'Verifying & Saving...' : 'Save & Activate System Mail'}
                   </button>
                 </div>
               </form>
-
-              {/* Live Standalone Engine Diagnostics Summary */}
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Standalone Workspace Engine Records Overview
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 text-center">
-                  {[
-                    { label: 'Gmail Accounts', count: gmailAccounts.length },
-                    { label: 'Server Accounts', count: serverAccounts.length },
-                    { label: 'Docs', count: sysStats.docs },
-                    { label: 'Slides', count: sysStats.slides },
-                    { label: 'Forms', count: sysStats.forms },
-                    { label: 'Meetings', count: sysStats.meetings },
-                    { label: 'Team Members', count: sysStats.members },
-                    { label: 'CMH Tasks', count: sysStats.tasks },
-                    { label: 'CMH Projects', count: sysStats.projects },
-                    { label: 'Server Files', count: sysStats.files },
-                    { label: 'Stored Emails', count: sysStats.messages },
-                    {
-                      label: 'API Keys',
-                      count: sysSettings.externalIntegrations.length,
-                    },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800"
-                    >
-                      <div className="text-base font-bold text-[#0B57D0] tabular-nums">
-                        {stat.count}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">{stat.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

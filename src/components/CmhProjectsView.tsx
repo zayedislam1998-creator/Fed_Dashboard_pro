@@ -39,6 +39,8 @@ import { CmhFormFieldsEditorModal } from './CmhFormFieldsEditorModal';
 export type CmhProjectsSubTab = 'all_projects' | 'create_project';
 
 interface CmhProjectsViewProps {
+  initialItemId?: string;
+  onInitialItemOpened?: () => void;
   activeSubTab?: CmhProjectsSubTab;
   onSubTabChange?: (tab: CmhProjectsSubTab) => void;
   searchQuery?: string;
@@ -57,6 +59,8 @@ const PRIORITY_STYLES: Record<
 };
 
 export const CmhProjectsView: React.FC<CmhProjectsViewProps> = ({
+  initialItemId,
+  onInitialItemOpened,
   activeSubTab = 'all_projects',
   onSubTabChange,
   searchQuery = '',
@@ -104,6 +108,15 @@ export const CmhProjectsView: React.FC<CmhProjectsViewProps> = ({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [isFieldsEditorOpen, setIsFieldsEditorOpen] = useState(false);
 
+
+  useEffect(() => {
+    if (!initialItemId) return;
+    const item = projects.find((entry) => entry.id === initialItemId);
+    if (!item) return;
+    setInspectingProject(item);
+    setSelectedSubmission(item.submissions?.[0] || null);
+    onInitialItemOpened?.();
+  }, [initialItemId, projects, onInitialItemOpened]);
   useEffect(() => {
     setSubTab(activeSubTab);
   }, [activeSubTab]);

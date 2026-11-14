@@ -9,6 +9,28 @@ export interface SseClientEntry {
 }
 
 export const sseClients = new Set<SseClientEntry>();
+export const sseClientsByUser = new Map<string, Set<SseClientEntry>>();
+
+export function addSseClient(entry: SseClientEntry) {
+  sseClients.add(entry);
+  let userClients = sseClientsByUser.get(entry.userId);
+  if (!userClients) {
+    userClients = new Set();
+    sseClientsByUser.set(entry.userId, userClients);
+  }
+  userClients.add(entry);
+}
+
+export function removeSseClient(entry: SseClientEntry) {
+  sseClients.delete(entry);
+  const userClients = sseClientsByUser.get(entry.userId);
+  if (userClients) {
+    userClients.delete(entry);
+    if (userClients.size === 0) {
+      sseClientsByUser.delete(entry.userId);
+    }
+  }
+}
 
 export function broadcastRealtimeEvent(
   eventName: string,
@@ -34,14 +56,28 @@ export function broadcastRealtimeEvent(
   }
 
   const packet = `data: ${JSON.stringify({ event: eventName, payload, ts: Date.now() })}\n\n`;
-  for (const client of Array.from(sseClients)) {
-    if (allowedUsers && !allowedUsers.has(client.userId)) {
-      continue;
+
+  if (allowedUsers) {
+    // Targeted broadcast: O(targets) instead of O(all_connected_users)
+    for (const uid of allowedUsers) {
+      const userClients = sseClientsByUser.get(uid);
+      if (!userClients) continue;
+      for (const client of Array.from(userClients)) {
+        try {
+          client.res.write(packet);
+        } catch {
+          removeSseClient(client);
+        }
+      }
     }
-    try {
-      client.res.write(packet);
-    } catch {
-      sseClients.delete(client);
+  } else {
+    // Workspace-wide broadcast
+    for (const client of Array.from(sseClients)) {
+      try {
+        client.res.write(packet);
+      } catch {
+        removeSseClient(client);
+      }
     }
   }
 }
@@ -123,20 +159,20 @@ export function registerRealtimeAndNotificationRoutes(app: express.Express) {
     const clientEntry: SseClientEntry = { userId, res };
 
     res.write(`data: ${JSON.stringify({ event: 'connected', ts: Date.now() })}\n\n`);
-    sseClients.add(clientEntry);
+    addSseClient(clientEntry);
 
     const heartbeat = setInterval(() => {
       try {
         res.write(`: heartbeat ${Date.now()}\n\n`);
       } catch {
         clearInterval(heartbeat);
-        sseClients.delete(clientEntry);
+        removeSseClient(clientEntry);
       }
     }, 25000);
 
     req.on('close', () => {
       clearInterval(heartbeat);
-      sseClients.delete(clientEntry);
+      removeSseClient(clientEntry);
     });
   });
 

@@ -1,6 +1,6 @@
+import { queueAdminMail, queueDirectoryAssignments } from '../mail/workspaceMailAutomation';
 import express from 'express';
-import nodemailer from 'nodemailer';
-import { decryptSecret, prisma } from '../db/prisma';
+import { prisma } from '../db/prisma';
 import { ensureWorkspaceBootstrap, getPrimaryAdminIdentity } from '../db/initEngine';
 import {
   toCmhFormDto,
@@ -23,11 +23,18 @@ import {
   broadcastRealtimeEvent,
   recordAndBroadcastNotification,
 } from '../realtime';
+import {
+  appendFormSubmissionAtomic,
+  appendProjectSubmissionAtomic,
+  appendTaskSubmissionAtomic,
+  createSubmissionId,
+} from '../services/atomicSubmissionService';
 
 async function triggerCmhActivityAndAdminMail(params: {
   activityType: 'FORM_SUBMIT' | 'TASK_ACTIVITY' | 'PROJECT_ACTIVITY' | 'MEMBER_ACTIVITY';
   module: 'cmh_tasks' | 'cmh_projects' | 'cmh_forms';
   targetId: string;
+  isSubmission?: boolean;
   title: string;
   description: string;
   actorName: string;
@@ -36,10 +43,12 @@ async function triggerCmhActivityAndAdminMail(params: {
   detailsMap?: Record<string, any>;
 }) {
   await ensureWorkspaceBootstrap();
-  const [rules, primaryServerAcc, adminIdentity] = await Promise.all([
+  const [rules, primaryServerAcc, adminIdentity, workspaceSettings] = await Promise.all([
     prisma.cmhNotificationRule.findUnique({ where: { id: 'cmh-rules-default' } }),
-    prisma.serverMailAccount.findFirst(),
+    prisma.workspaceMailAutomation.findUnique({ where: { id: 'default' } }).then((config) =>
+      config?.accountId ? prisma.serverMailAccount.findUnique({ where: { id: config.accountId } }) : null),
     getPrimaryAdminIdentity(),
+    prisma.workspaceSystemSetting.findUnique({ where: { id: 'default' } }),
   ]);
 
   if (!rules) return;
@@ -61,36 +70,37 @@ async function triggerCmhActivityAndAdminMail(params: {
   });
 
   const adminRecipientEmail =
-    rules.adminEmail?.trim() || primaryServerAcc?.email || adminIdentity.email;
+    workspaceSettings?.adminEmail?.trim() || adminIdentity.email;
 
+  const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
   const detailsRowsHtml = Object.entries(params.detailsMap || {})
     .map(
       ([k, v]) => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:600;color:#475569;width:38%;">${k}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:600;color:#475569;width:38%;">${escape(k)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#0f172a;">${
-          Array.isArray(v) ? v.join(', ') : String(v ?? '—')
+          escape(Array.isArray(v) ? v.join(', ') : String(v ?? '—'))
         }</td>
       </tr>`
     )
     .join('');
 
   const detailsLinesText = Object.entries(params.detailsMap || {})
-    .map(([k, v]) => `• ${k}: ${Array.isArray(v) ? v.join(', ') : String(v ?? '—')}`)
+    .map(([k, v]) => `• ${escape(k)}: ${Array.isArray(v) ? v.join(', ') : String(v ?? '—')}`)
     .join('\n');
 
-  const emailSubject = `[CMH Real-Time Alert] ${params.title}`;
+  const emailSubject = `[CMH Real-Time Alert] ${escape(params.title)}`;
   const emailHtml = `
     <div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:620px;margin:0 auto;padding:20px;border:1px solid #e2e8f0;border-radius:14px;background:#ffffff;">
       <div style="font-size:11px;font-weight:700;color:#0B57D0;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">
         CMH App · Real-Time Admin Notification & Mail
       </div>
-      <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${params.title}</h2>
+      <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${escape(params.title)}</h2>
       <p style="margin:0 0 16px 0;font-size:13px;color:#475569;line-height:1.6;">
-        ${params.description}
+        ${escape(params.description)}
       </p>
       <div style="margin-bottom:14px;padding:10px 14px;background:#f8fafc;border-radius:10px;font-size:12px;color:#334155;">
-        <strong>Submitted / Updated By:</strong> ${params.actorName} (${params.actorEmail})<br/>
+        <strong>Submitted / Updated By:</strong> ${escape(params.actorName)} (${escape(params.actorEmail)})<br/>
         <strong>Time:</strong> ${new Date().toLocaleString()}
       </div>
       ${
@@ -103,7 +113,7 @@ async function triggerCmhActivityAndAdminMail(params: {
       ${
         params.shareUrl
           ? `<div style="margin-top:16px;">
-              <a href="${params.shareUrl}" target="_blank" style="display:inline-block;padding:10px 18px;background:#0B57D0;color:#ffffff;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">
+              <a href="${escape(params.shareUrl)}" target="_blank" style="display:inline-block;padding:10px 18px;background:#0B57D0;color:#ffffff;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600;">
                 Open Item Link →
               </a>
             </div>`
@@ -138,37 +148,19 @@ async function triggerCmhActivityAndAdminMail(params: {
     });
 
     const inboxDto = toMailMessageDto(inboxRow);
-    if (primaryServerAcc) {
-      broadcastRealtimeEvent('mail:arrived', {
-        accountId: primaryServerAcc.id,
-        message: inboxDto,
-      });
+    const admins = await prisma.workspaceUser.findMany({
+      where: { isActive: true, role: { in: ['OWNER', 'ADMIN'] } }, select: { id: true },
+    });
+    const recipients = admins.map((admin) => admin.id);
+    if (recipients.length && primaryServerAcc) {
+      broadcastRealtimeEvent('mail:arrived', { accountId: primaryServerAcc.id, message: inboxDto }, recipients);
     }
-    broadcastRealtimeEvent('cmh:admin_mail', { message: inboxDto });
+    if (recipients.length) broadcastRealtimeEvent('cmh:admin_mail', { message: inboxDto }, recipients);
   }
 
-  if (rules.autoSendAdminEmail && primaryServerAcc) {
-    setImmediate(async () => {
-      try {
-        const plainPassword = decryptSecret(primaryServerAcc.encryptedPassword);
-        const transporter = nodemailer.createTransport({
-          host: primaryServerAcc.smtpHost,
-          port: primaryServerAcc.smtpPort,
-          secure: primaryServerAcc.smtpSecure,
-          auth: { user: primaryServerAcc.username, pass: plainPassword },
-          tls: { rejectUnauthorized: false },
-        });
-        await transporter.sendMail({
-          from: `"${primaryServerAcc.label} (CMH Admin Alert)" <${primaryServerAcc.email}>`,
-          to: adminRecipientEmail,
-          subject: emailSubject,
-          text: emailText,
-          html: emailHtml,
-        });
-      } catch {
-        // Primary inbox & notification already persisted in PostgreSQL
-      }
-    });
+  if (rules.autoSendAdminEmail && !params.isSubmission) {
+    await queueAdminMail('cmh-created:' + params.module + ':' + params.targetId,
+      params.title, 'A workspace item was created or updated. Sign in to Workspace Pro to review it.');
   }
 }
 
@@ -366,45 +358,50 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
       });
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      const savedRow = await prisma.cmhTask.upsert({
-        where: { id: taskId },
-        update: {
-          title: String(title).trim(),
-          description: String(description || '').trim(),
-          formTemplateId: matchedTemplate?.id || 'cmh-form-task-standard',
-          formTemplateTitle: matchedTemplate?.title || 'Standard Task Form',
-          status: status || existing?.status || 'To Do',
-          priority: priority || existing?.priority || 'Medium',
-          dueDate: String(dueDate ?? existing?.dueDate ?? ''),
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
-          assignedMemberIdsJson: Array.isArray(assignedMemberIds)
-            ? assignedMemberIds
-            : (existing?.assignedMemberIdsJson ?? []),
-          assignedTeamIdsJson: Array.isArray(assignedTeamIds)
-            ? assignedTeamIds
-            : (existing?.assignedTeamIdsJson ?? []),
-          customFieldValuesJson: customFieldValues ?? existing?.customFieldValuesJson ?? {},
-          updatedAt: nowTime,
-          timestampMs: BigInt(Date.now()),
-        },
-        create: {
-          id: taskId,
-          title: String(title).trim(),
-          description: String(description || '').trim(),
-          formTemplateId: matchedTemplate?.id || 'cmh-form-task-standard',
-          formTemplateTitle: matchedTemplate?.title || 'Standard Task Form',
-          status: status || 'To Do',
-          priority: priority || 'Medium',
-          dueDate: String(dueDate || 'Upcoming'),
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
-          assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
-          assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
-          customFieldValuesJson: customFieldValues || {},
-          submissionsJson: [],
-          createdAt: nowDate,
-          updatedAt: 'Just now',
-          timestampMs: BigInt(Date.now()),
-        },
+      const savedRow = await prisma.$transaction(async (tx) => {
+        const saved = await tx.cmhTask.upsert({
+          where: { id: taskId },
+          update: {
+            title: String(title).trim(),
+            description: String(description || '').trim(),
+            formTemplateId: matchedTemplate?.id || 'cmh-form-task-standard',
+            formTemplateTitle: matchedTemplate?.title || 'Standard Task Form',
+            status: status || existing?.status || 'To Do',
+            priority: priority || existing?.priority || 'Medium',
+            dueDate: String(dueDate ?? existing?.dueDate ?? ''),
+            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            assignedMemberIdsJson: Array.isArray(assignedMemberIds)
+              ? assignedMemberIds
+              : (existing?.assignedMemberIdsJson ?? []),
+            assignedTeamIdsJson: Array.isArray(assignedTeamIds)
+              ? assignedTeamIds
+              : (existing?.assignedTeamIdsJson ?? []),
+            customFieldValuesJson: customFieldValues ?? existing?.customFieldValuesJson ?? {},
+            updatedAt: nowTime,
+            timestampMs: BigInt(Date.now()),
+          },
+          create: {
+            id: taskId,
+            title: String(title).trim(),
+            description: String(description || '').trim(),
+            formTemplateId: matchedTemplate?.id || 'cmh-form-task-standard',
+            formTemplateTitle: matchedTemplate?.title || 'Standard Task Form',
+            status: status || 'To Do',
+            priority: priority || 'Medium',
+            dueDate: String(dueDate || 'Upcoming'),
+            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
+            assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
+            customFieldValuesJson: customFieldValues || {},
+            submissionsJson: [],
+            createdAt: nowDate,
+            updatedAt: 'Just now',
+            timestampMs: BigInt(Date.now()),
+          },
+        });
+        await queueDirectoryAssignments('task', saved.id, saved.title, saved.assignedMemberIdsJson, saved.assignedTeamIdsJson, tx,
+          existing ? { members: existing.assignedMemberIdsJson, teams: existing.assignedTeamIdsJson } : undefined);
+        return saved;
       });
 
       const savedDto = toCmhTaskDto(savedRow);
@@ -490,47 +487,52 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
       });
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      const savedRow = await prisma.cmhProject.upsert({
-        where: { id: projectId },
-        update: {
-          title: String(title).trim(),
-          description: String(description || '').trim(),
-          formTemplateId: matchedTemplate?.id || 'cmh-form-project-blueprint',
-          formTemplateTitle: matchedTemplate?.title || 'Enterprise Project Blueprint',
-          status: status || existing?.status || 'Active',
-          priority: priority || existing?.priority || 'High',
-          deadline: String(deadline ?? existing?.deadline ?? ''),
-          budget: String(budget ?? existing?.budget ?? ''),
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
-          assignedMemberIdsJson: Array.isArray(assignedMemberIds)
-            ? assignedMemberIds
-            : (existing?.assignedMemberIdsJson ?? []),
-          assignedTeamIdsJson: Array.isArray(assignedTeamIds)
-            ? assignedTeamIds
-            : (existing?.assignedTeamIdsJson ?? []),
-          customFieldValuesJson: customFieldValues ?? existing?.customFieldValuesJson ?? {},
-          updatedAt: nowTime,
-          timestampMs: BigInt(Date.now()),
-        },
-        create: {
-          id: projectId,
-          title: String(title).trim(),
-          description: String(description || '').trim(),
-          formTemplateId: matchedTemplate?.id || 'cmh-form-project-blueprint',
-          formTemplateTitle: matchedTemplate?.title || 'Enterprise Project Blueprint',
-          status: status || 'Active',
-          priority: priority || 'High',
-          deadline: String(deadline || 'Q4 2026'),
-          budget: String(budget || 'TBD'),
-          accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
-          assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
-          assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
-          customFieldValuesJson: customFieldValues || {},
-          submissionsJson: [],
-          createdAt: nowDate,
-          updatedAt: 'Just now',
-          timestampMs: BigInt(Date.now()),
-        },
+      const savedRow = await prisma.$transaction(async (tx) => {
+        const saved = await tx.cmhProject.upsert({
+          where: { id: projectId },
+          update: {
+            title: String(title).trim(),
+            description: String(description || '').trim(),
+            formTemplateId: matchedTemplate?.id || 'cmh-form-project-blueprint',
+            formTemplateTitle: matchedTemplate?.title || 'Enterprise Project Blueprint',
+            status: status || existing?.status || 'Active',
+            priority: priority || existing?.priority || 'High',
+            deadline: String(deadline ?? existing?.deadline ?? ''),
+            budget: String(budget ?? existing?.budget ?? ''),
+            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            assignedMemberIdsJson: Array.isArray(assignedMemberIds)
+              ? assignedMemberIds
+              : (existing?.assignedMemberIdsJson ?? []),
+            assignedTeamIdsJson: Array.isArray(assignedTeamIds)
+              ? assignedTeamIds
+              : (existing?.assignedTeamIdsJson ?? []),
+            customFieldValuesJson: customFieldValues ?? existing?.customFieldValuesJson ?? {},
+            updatedAt: nowTime,
+            timestampMs: BigInt(Date.now()),
+          },
+          create: {
+            id: projectId,
+            title: String(title).trim(),
+            description: String(description || '').trim(),
+            formTemplateId: matchedTemplate?.id || 'cmh-form-project-blueprint',
+            formTemplateTitle: matchedTemplate?.title || 'Enterprise Project Blueprint',
+            status: status || 'Active',
+            priority: priority || 'High',
+            deadline: String(deadline || 'Q4 2026'),
+            budget: String(budget || 'TBD'),
+            accessMode: accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            assignedMemberIdsJson: Array.isArray(assignedMemberIds) ? assignedMemberIds : [],
+            assignedTeamIdsJson: Array.isArray(assignedTeamIds) ? assignedTeamIds : [],
+            customFieldValuesJson: customFieldValues || {},
+            submissionsJson: [],
+            createdAt: nowDate,
+            updatedAt: 'Just now',
+            timestampMs: BigInt(Date.now()),
+          },
+        });
+        await queueDirectoryAssignments('project', saved.id, saved.title, saved.assignedMemberIdsJson, saved.assignedTeamIdsJson, tx,
+          existing ? { members: existing.assignedMemberIdsJson, teams: existing.assignedTeamIdsJson } : undefined);
+        return saved;
       });
 
       const savedDto = toCmhProjectDto(savedRow);
@@ -623,85 +625,40 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
         },
       });
 
-      let itemTitle = 'CMH Workspace Item';
-      if (targetType === 'form') {
-        const updated = await prisma.cmhFormTemplate
-          .update({
-            where: { id: String(targetId) },
-            data: {
-              invitedMemberIdsJson: selectedMemberIds,
-              invitedTeamIdsJson: selectedTeamIds,
-            },
-          })
-          .catch(() => null);
-        if (updated) itemTitle = updated.title;
-      } else if (targetType === 'task') {
-        const updated = await prisma.cmhTask
-          .update({
-            where: { id: String(targetId) },
-            data: {
-              assignedMemberIdsJson: selectedMemberIds,
-              assignedTeamIdsJson: selectedTeamIds,
-            },
-          })
-          .catch(() => null);
-        if (updated) itemTitle = updated.title;
-      } else if (targetType === 'project') {
-        const updated = await prisma.cmhProject
-          .update({
-            where: { id: String(targetId) },
-            data: {
-              assignedMemberIdsJson: selectedMemberIds,
-              assignedTeamIdsJson: selectedTeamIds,
-            },
-          })
-          .catch(() => null);
-        if (updated) itemTitle = updated.title;
-      }
-
-      const shareUrl = `${originUrl || 'http://localhost:3000'}/?cmh=${targetType}:${targetId}`;
-      const serverAcc = await prisma.serverMailAccount.findFirst();
-
-      for (const member of recipientMembers) {
-        if (!serverAcc) break;
-        try {
-          const plainPassword = decryptSecret(serverAcc.encryptedPassword);
-          const transporter = nodemailer.createTransport({
-            host: serverAcc.smtpHost,
-            port: serverAcc.smtpPort,
-            secure: serverAcc.smtpSecure,
-            auth: { user: serverAcc.username, pass: plainPassword },
-            tls: { rejectUnauthorized: false },
-          });
-          await transporter.sendMail({
-            from: `"${serverAcc.label}" <${serverAcc.email}>`,
-            to: member.email,
-            subject: `Invitation: ${itemTitle} (${String(targetType).toUpperCase()})`,
-            text: `${itemTitle}\n\nOpen Link: ${shareUrl}`,
-            html: `
-              <div style="font-family:sans-serif;max-width:580px;padding:20px;border:1px solid #e2e8f0;border-radius:12px;">
-                <h2 style="margin:0 0 8px 0;color:#0f172a;">You have been invited to: ${itemTitle}</h2>
-                <p style="font-size:13px;color:#475569;">Hello ${member.fullName},</p>
-                <p style="font-size:13px;color:#334155;line-height:1.6;">
-                  ${customMessage || 'Please review and submit your update using the direct link below:'}
-                </p>
-                <div style="margin:18px 0;">
-                  <a href="${shareUrl}" target="_blank" style="display:inline-block;padding:10px 18px;background:#0B57D0;color:#ffffff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">
-                    Open ${String(targetType).toUpperCase()} Portal →
-                  </a>
-                </div>
-                <p style="font-size:11px;color:#64748b;">Direct Link: ${shareUrl}</p>
-              </div>
-            `,
-          });
-        } catch {
-          // continue loop
-        }
-      }
+      const result = await prisma.$transaction(async (tx) => {
+        const selection = { members: selectedMemberIds, teams: selectedTeamIds };
+        let current;
+        let previous;
+        if (targetType === 'form') {
+          const form = await tx.cmhFormTemplate.findUnique({ where: { id: String(targetId) } });
+          if (!form) return null;
+          previous = { members: form.invitedMemberIdsJson, teams: form.invitedTeamIdsJson };
+          current = await tx.cmhFormTemplate.update({ where: { id: form.id },
+            data: { invitedMemberIdsJson: selectedMemberIds, invitedTeamIdsJson: selectedTeamIds } });
+        } else if (targetType === 'task' || targetType === 'project') {
+          const where = { id: String(targetId) };
+          const item = targetType === 'task'
+            ? await tx.cmhTask.findUnique({ where })
+            : await tx.cmhProject.findUnique({ where });
+          if (!item) return null;
+          previous = { members: item.assignedMemberIdsJson, teams: item.assignedTeamIdsJson };
+          const data = { assignedMemberIdsJson: selectedMemberIds, assignedTeamIdsJson: selectedTeamIds };
+          current = targetType === 'task'
+            ? await tx.cmhTask.update({ where: { id: item.id }, data })
+            : await tx.cmhProject.update({ where: { id: item.id }, data });
+        } else return null;
+        const queued = await queueDirectoryAssignments(targetType, current.id, current.title,
+          selection.members, selection.teams, tx, previous,
+          typeof customMessage === 'string' ? customMessage : undefined);
+        return { title: current.title, queued };
+      });
+      if (!result) { res.status(404).json({ error: 'Workspace item not found.' }); return; }
+      const itemTitle = result.title;
+      const shareUrl = (originUrl || 'http://localhost:3000') + '/?cmh=' + targetType + ':' + targetId;
 
       await recordAndBroadcastNotification({
         type: 'cmh_activity',
-        title: `Sent ${recipientMembers.length} Member Invitation(s) for "${itemTitle}"`,
+        title: `Queued ${result.queued} email(s) for "${itemTitle}"`,
         description: `Invited ${
           recipientMembers.map((m) => m.fullName).join(', ') || 'selected members'
         } with link ${shareUrl}`,
@@ -743,7 +700,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           res.status(404).json({ error: 'Form not found.' });
           return;
         }
-        const dto = toCmhFormDto(form);
+        const dto = { ...toCmhFormDto(form), submissions: [] };
         res.json({
           targetType: 'form',
           item: dto,
@@ -764,8 +721,8 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           (await prisma.cmhFormTemplate.findFirst({ orderBy: { timestampMs: 'desc' } }));
         res.json({
           targetType: 'task',
-          item: toCmhTaskDto(task),
-          template: template ? toCmhFormDto(template) : undefined,
+          item: { ...toCmhTaskDto(task), submissions: [] },
+          template: template ? { ...toCmhFormDto(template), submissions: [] } : undefined,
           members: members.map(toWorkspaceMemberDto),
         });
         return;
@@ -782,8 +739,8 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           (await prisma.cmhFormTemplate.findFirst({ orderBy: { timestampMs: 'desc' } }));
         res.json({
           targetType: 'project',
-          item: toCmhProjectDto(project),
-          template: template ? toCmhFormDto(template) : undefined,
+          item: { ...toCmhProjectDto(project), submissions: [] },
+          template: template ? { ...toCmhFormDto(template), submissions: [] } : undefined,
           members: members.map(toWorkspaceMemberDto),
         });
         return;
@@ -804,6 +761,12 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
         return;
       }
 
+      const requestId = req.get('Idempotency-Key');
+      if (requestId && !/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)) {
+        res.status(400).json({ error: 'Invalid submission request ID.' });
+        return;
+      }
+      const submissionId = createSubmissionId(requestId);
       const cleanEmail = String(submitterEmail).trim();
       const cleanName = String(submitterName || cleanEmail.split('@')[0]).trim();
       const nowStr = new Date().toLocaleString([], {
@@ -821,7 +784,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           return;
         }
         const submission = {
-          id: `cmh-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: submissionId,
           targetType: 'FORM',
           targetId: form.id,
           targetTitle: form.title,
@@ -831,32 +794,31 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           timestamp: Date.now(),
           values: values || {},
         };
-        const prevSubs = Array.isArray(form.submissionsJson) ? (form.submissionsJson as any[]) : [];
-        const updatedForm = await prisma.cmhFormTemplate.update({
-          where: { id },
-          data: { submissionsJson: [submission, ...prevSubs] },
-        });
+        const { updated: updatedForm, submission: savedSubmission, duplicate } = await appendFormSubmissionAtomic(id, submission);
         const formDto = toCmhFormDto(updatedForm);
-        const labeledDetails: Record<string, any> = {};
-        for (const fld of formDto.fields) {
-          if (values && values[fld.id] !== undefined) {
-            labeledDetails[fld.label] =
-              fld.type === 'PASSWORD' ? '•••••••• (Encrypted)' : values[fld.id];
+        if (!duplicate) {
+          const labeledDetails: Record<string, any> = {};
+          for (const fld of formDto.fields) {
+            if (values && values[fld.id] !== undefined) {
+              labeledDetails[fld.label] =
+                fld.type === 'PASSWORD' ? '•••••••• (Encrypted)' : values[fld.id];
+            }
           }
+          broadcastRealtimeEvent('cmh:updated', { type: 'form', item: formDto });
+          await triggerCmhActivityAndAdminMail({
+            activityType: 'FORM_SUBMIT',
+            module: 'cmh_forms',
+            targetId: form.id,
+            isSubmission: true,
+            title: `Form Submitted: "${form.title}" by ${cleanName}`,
+            description: `${cleanName} (${cleanEmail}) submitted "${form.title}" (${form.formCategory} Form).`,
+            actorName: cleanName,
+            actorEmail: cleanEmail,
+            shareUrl,
+            detailsMap: labeledDetails,
+          });
         }
-        broadcastRealtimeEvent('cmh:updated', { type: 'form', item: formDto });
-        await triggerCmhActivityAndAdminMail({
-          activityType: 'FORM_SUBMIT',
-          module: 'cmh_forms',
-          targetId: form.id,
-          title: `Form Submitted: "${form.title}" by ${cleanName}`,
-          description: `${cleanName} (${cleanEmail}) submitted "${form.title}" (${form.formCategory} Form).`,
-          actorName: cleanName,
-          actorEmail: cleanEmail,
-          shareUrl,
-          detailsMap: labeledDetails,
-        });
-        res.json({ ok: true, confirmationMessage: formDto.confirmationMessage, submission });
+        res.json({ ok: true, confirmationMessage: formDto.confirmationMessage, submission: savedSubmission });
         return;
       }
 
@@ -870,7 +832,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           where: { id: task.formTemplateId },
         });
         const submission = {
-          id: `cmh-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: submissionId,
           targetType: 'TASK',
           targetId: task.id,
           targetTitle: task.title,
@@ -880,38 +842,37 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           timestamp: Date.now(),
           values: { ...(values || {}), ...(statusUpdate ? { Status: statusUpdate } : {}) },
         };
-        const prevSubs = Array.isArray(task.submissionsJson) ? (task.submissionsJson as any[]) : [];
-        const updatedTask = await prisma.cmhTask.update({
-          where: { id },
-          data: {
-            ...(statusUpdate ? { status: String(statusUpdate) } : {}),
-            submissionsJson: [submission, ...prevSubs],
-            updatedAt: nowStr,
-          },
-        });
+        const { updated: updatedTask, submission: savedSubmission, duplicate } = await appendTaskSubmissionAtomic(
+          id,
+          submission,
+          statusUpdate ? String(statusUpdate) : undefined
+        );
         const taskDto = toCmhTaskDto(updatedTask);
-        const labeledDetails: Record<string, any> = { 'Task Status': taskDto.status };
-        if (template) {
-          const tplDto = toCmhFormDto(template);
-          for (const fld of tplDto.fields) {
-            if (values && values[fld.id] !== undefined) {
-              labeledDetails[fld.label] = values[fld.id];
+        if (!duplicate) {
+          const labeledDetails: Record<string, any> = { 'Task Status': taskDto.status };
+          if (template) {
+            const tplDto = toCmhFormDto(template);
+            for (const fld of tplDto.fields) {
+              if (values && values[fld.id] !== undefined) {
+                labeledDetails[fld.label] = values[fld.id];
+              }
             }
           }
+          broadcastRealtimeEvent('cmh:updated', { type: 'task', item: taskDto });
+          await triggerCmhActivityAndAdminMail({
+            activityType: 'TASK_ACTIVITY',
+            module: 'cmh_tasks',
+            targetId: task.id,
+            isSubmission: true,
+            title: `Task Response Submitted: "${task.title}" by ${cleanName}`,
+            description: `${cleanName} (${cleanEmail}) submitted an update on Task "${task.title}" (Status: ${taskDto.status}).`,
+            actorName: cleanName,
+            actorEmail: cleanEmail,
+            shareUrl,
+            detailsMap: labeledDetails,
+          });
         }
-        broadcastRealtimeEvent('cmh:updated', { type: 'task', item: taskDto });
-        await triggerCmhActivityAndAdminMail({
-          activityType: 'TASK_ACTIVITY',
-          module: 'cmh_tasks',
-          targetId: task.id,
-          title: `Task Response Submitted: "${task.title}" by ${cleanName}`,
-          description: `${cleanName} (${cleanEmail}) submitted an update on Task "${task.title}" (Status: ${taskDto.status}).`,
-          actorName: cleanName,
-          actorEmail: cleanEmail,
-          shareUrl,
-          detailsMap: labeledDetails,
-        });
-        res.json({ ok: true, confirmationMessage: 'Task update recorded and sent to Admin!', submission });
+        res.json({ ok: true, confirmationMessage: 'Task update recorded and sent to Admin!', submission: savedSubmission });
         return;
       }
 
@@ -925,7 +886,7 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           where: { id: project.formTemplateId },
         });
         const submission = {
-          id: `cmh-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: submissionId,
           targetType: 'PROJECT',
           targetId: project.id,
           targetTitle: project.title,
@@ -935,40 +896,37 @@ export function registerCmhAndEngineRoutes(app: express.Express) {
           timestamp: Date.now(),
           values: { ...(values || {}), ...(statusUpdate ? { Status: statusUpdate } : {}) },
         };
-        const prevSubs = Array.isArray(project.submissionsJson)
-          ? (project.submissionsJson as any[])
-          : [];
-        const updatedProject = await prisma.cmhProject.update({
-          where: { id },
-          data: {
-            ...(statusUpdate ? { status: String(statusUpdate) } : {}),
-            submissionsJson: [submission, ...prevSubs],
-            updatedAt: nowStr,
-          },
-        });
+        const { updated: updatedProject, submission: savedSubmission, duplicate } = await appendProjectSubmissionAtomic(
+          id,
+          submission,
+          statusUpdate ? String(statusUpdate) : undefined
+        );
         const projectDto = toCmhProjectDto(updatedProject);
-        const labeledDetails: Record<string, any> = { 'Project Status': projectDto.status };
-        if (template) {
-          const tplDto = toCmhFormDto(template);
-          for (const fld of tplDto.fields) {
-            if (values && values[fld.id] !== undefined) {
-              labeledDetails[fld.label] = values[fld.id];
+        if (!duplicate) {
+          const labeledDetails: Record<string, any> = { 'Project Status': projectDto.status };
+          if (template) {
+            const tplDto = toCmhFormDto(template);
+            for (const fld of tplDto.fields) {
+              if (values && values[fld.id] !== undefined) {
+                labeledDetails[fld.label] = values[fld.id];
+              }
             }
           }
+          broadcastRealtimeEvent('cmh:updated', { type: 'project', item: projectDto });
+          await triggerCmhActivityAndAdminMail({
+            activityType: 'PROJECT_ACTIVITY',
+            module: 'cmh_projects',
+            targetId: project.id,
+            isSubmission: true,
+            title: `Project Update Submitted: "${project.title}" by ${cleanName}`,
+            description: `${cleanName} (${cleanEmail}) submitted an update on Project "${project.title}" (Status: ${projectDto.status}).`,
+            actorName: cleanName,
+            actorEmail: cleanEmail,
+            shareUrl,
+            detailsMap: labeledDetails,
+          });
         }
-        broadcastRealtimeEvent('cmh:updated', { type: 'project', item: projectDto });
-        await triggerCmhActivityAndAdminMail({
-          activityType: 'PROJECT_ACTIVITY',
-          module: 'cmh_projects',
-          targetId: project.id,
-          title: `Project Update Submitted: "${project.title}" by ${cleanName}`,
-          description: `${cleanName} (${cleanEmail}) submitted an update on Project "${project.title}" (Status: ${projectDto.status}).`,
-          actorName: cleanName,
-          actorEmail: cleanEmail,
-          shareUrl,
-          detailsMap: labeledDetails,
-        });
-        res.json({ ok: true, confirmationMessage: 'Project submission recorded and sent to Admin!', submission });
+        res.json({ ok: true, confirmationMessage: 'Project submission recorded and sent to Admin!', submission: savedSubmission });
         return;
       }
 

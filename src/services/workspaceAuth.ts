@@ -341,12 +341,16 @@ export async function fetchMemberPortalBootstrap() {
 
 export async function submitMemberTaskProgress(
   taskId: string,
-  payload: { statusUpdate?: string; note?: string; values?: Record<string, any> }
+  payload: { statusUpdate?: string; note?: string; values?: Record<string, any> },
+  requestId?: string
 ) {
   const res = await fetch(`/api/member/tasks/${encodeURIComponent(taskId)}/submit`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(requestId ? { 'Idempotency-Key': requestId } : {}),
+    },
     body: JSON.stringify(payload),
   });
   return parseJsonOrThrow(res);

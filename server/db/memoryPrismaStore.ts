@@ -78,7 +78,7 @@ const MODEL_DEFAULTS: Record<string, () => Row> = {
     id: 'default',
     workspaceName: 'Workspace Pro',
     organizationName: '',
-    adminEmail: 'zayed.islam1998@gmail.com',
+    adminEmail: (process.env.ADMIN_USERNAME || 'admin@workspace.local').trim(),
     timezone: 'Asia/Dhaka',
     dateFormat: 'MMM DD, YYYY',
     defaultLandingModule: 'gmail',
@@ -103,6 +103,8 @@ const MODEL_DEFAULTS: Record<string, () => Row> = {
     smtpPort: 465,
     smtpSecure: true,
     lastVerifiedAt: null,
+    role: 'general',
+    isSystemPrimary: false,
     extraFields: {},
   }),
   gmailAccount: () => ({
@@ -118,6 +120,8 @@ const MODEL_DEFAULTS: Record<string, () => Row> = {
     clientSecretEnc: null,
     refreshTokenEnc: null,
     lastVerifiedAt: null,
+    role: 'general',
+    isSystemPrimary: false,
     extraFields: {},
   }),
   mailMessage: () => ({
@@ -311,7 +315,7 @@ const MODEL_DEFAULTS: Record<string, () => Row> = {
     extraFields: {},
   }),
   cmhNotificationRule: () => ({
-    adminEmail: 'zayed.islam1998@gmail.com',
+    adminEmail: (process.env.ADMIN_USERNAME || 'admin@workspace.local').trim(),
     notifyOnFormSubmit: true,
     notifyOnTaskActivity: true,
     notifyOnProjectActivity: true,
@@ -468,6 +472,22 @@ const MODEL_DEFAULTS: Record<string, () => Row> = {
     contactJson: {},
     settingsJson: {},
   }),
+  workspaceMailAutomation: () => ({
+    accountId: null,
+    senderType: 'server_mail',
+    fallbackAccountId: null,
+    fallbackSenderType: null,
+  }),
+  workspaceMailDelivery: () => ({
+    status: 'PENDING',
+    attempts: 0,
+    priority: 'NORMAL',
+    eventType: null,
+    nextAt: new Date(),
+    createdAt: new Date(),
+    sentAt: null,
+    lastError: null,
+  }),
 };
 
 const COMPOUND_KEYS: Record<string, string[]> = {
@@ -576,6 +596,10 @@ function matchesFieldCondition(rowVal: any, cond: any): boolean {
     } else if (matchesFieldCondition(rowVal, cond.not)) {
       return false;
     }
+  }
+  if ('array_contains' in cond) {
+    if (!Array.isArray(rowVal) || !Array.isArray(cond.array_contains)) return false;
+    if (!cond.array_contains.every((item: unknown) => rowVal.includes(item))) return false;
   }
   if ('in' in cond && Array.isArray(cond.in)) {
     if (!cond.in.includes(rowVal)) return false;

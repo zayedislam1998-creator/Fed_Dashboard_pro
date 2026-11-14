@@ -12,6 +12,8 @@
     "lint": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
+    "prisma:mail": "prisma db execute --schema prisma/schema.prisma --file prisma/mail-install.sql",
+    "prisma:feed": "prisma db execute --schema prisma/schema.prisma --file prisma/feed-install.sql",
     "prisma:studio": "prisma studio",
     "db:status": "tsx -e \"import { checkPrismaHealth } from './server/db/prisma'; (async()=>{ console.log(await checkPrismaHealth()); process.exit(0); })()\""
   },

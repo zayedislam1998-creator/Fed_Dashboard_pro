@@ -1,5 +1,4 @@
 import { prisma } from '../db/prisma';
-import { syncWorkspaceUsersToMembers } from '../db/initEngine';
 
 export interface CommunicationAttachmentItem {
   id: string;
@@ -133,130 +132,109 @@ export async function getOrCreateDirectConversation(
 }
 
 /**
- * Get all conversations for a specific user, automatically provisioning 1-on-1 threads
- * for every active workspace member so all members appear automatically in Communication.
+ * Get all conversations for a specific user.
+ * High-performance, read-only query with zero auto-provisioning writes.
  */
 export async function getUserConversations(
-  userId: string
+  userId: string,
+  limit = 100
 ): Promise<CommunicationConversationDto[]> {
-  await syncWorkspaceUsersToMembers();
-
-  const [currentUser, allEligibleUsers, allMembers, existingConversations] = await Promise.all([
-    prisma.workspaceUser.findUnique({ where: { id: userId } }),
-    prisma.workspaceUser.findMany({
-      where: {
-        isActive: true,
-        role: { in: ['OWNER', 'ADMIN', 'MEMBER'] },
-        NOT: { id: userId },
-      },
-      orderBy: { timestampMs: 'asc' },
-    }),
-    prisma.workspaceMember.findMany(),
-    prisma.communicationConversation.findMany({
-      where: {
-        OR: [{ participant1Id: userId }, { participant2Id: userId }],
-      },
-    }),
-  ]);
-
-  const memberById = new Map(allMembers.map((m) => [m.id, m]));
-  const memberByEmail = new Map(allMembers.map((m) => [(m.email || '').toLowerCase(), m]));
-  const existingByKey = new Map(existingConversations.map((c) => [c.conversationKey, c]));
-
-  if (currentUser) {
-    const missingTargets: Array<{
-      id: string;
-      name: string;
-      role: string;
-      avatarUrl: string | null;
-    }> = [];
-
-    for (const target of allEligibleUsers) {
-      const linkedMem =
-        (target.memberId ? memberById.get(target.memberId) : undefined) ||
-        memberByEmail.get((target.email || '').toLowerCase());
-
-      const roleLabel =
-        linkedMem?.designation ||
-        (target.role === 'OWNER'
-          ? 'Owner & Super Admin'
-          : target.role === 'ADMIN'
-            ? 'Workspace Administrator'
-            : 'Workspace Member');
-
-      const key = resolveConversationKey(currentUser.id, target.id);
-      if (!existingByKey.has(key)) {
-        missingTargets.push({
-          id: target.id,
-          name: target.name,
-          role: roleLabel,
-          avatarUrl: target.avatarUrl || linkedMem?.avatarUrl || null,
-        });
-      }
-    }
-
-    if (missingTargets.length > 0) {
-      await Promise.all(
-        missingTargets.map((targetMeta) =>
-          getOrCreateDirectConversation(
-            {
-              id: currentUser.id,
-              name: currentUser.name,
-              role: currentUser.role,
-              avatarUrl: currentUser.avatarUrl,
-            },
-            targetMeta
-          )
-        )
-      );
-    }
-  }
-
-  const eligibleIdSet = new Set(allEligibleUsers.map((u) => u.id));
-
+  const take = Math.min(Math.max(1, limit), 200);
   const rows = await prisma.communicationConversation.findMany({
     where: {
       OR: [{ participant1Id: userId }, { participant2Id: userId }],
     },
     orderBy: { lastMessageTimestampMs: 'desc' },
+    take,
   });
 
+  if (rows.length === 0) {
+    return [];
+  }
+
+  // Collect distinct partner IDs
+  const partnerIds = Array.from(
+    new Set(
+      rows.map((r) => (r.participant1Id === userId ? r.participant2Id : r.participant1Id))
+    )
+  );
+
+  // Fetch only the specific partners involved in these active conversations
+  const [partnerUsers, partnerMembers] = await Promise.all([
+    prisma.workspaceUser.findMany({
+      where: { id: { in: partnerIds } },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        avatarUrl: true,
+        memberId: true,
+        email: true,
+      },
+    }),
+    prisma.workspaceMember.findMany({
+      where: {
+        OR: [{ id: { in: partnerIds } }],
+      },
+      select: {
+        id: true,
+        fullName: true,
+        designation: true,
+        avatarUrl: true,
+        email: true,
+      },
+    }),
+  ]);
+
+  const userMap = new Map(partnerUsers.map((u) => [u.id, u]));
+  const memberMap = new Map(partnerMembers.map((m) => [m.id, m]));
+  const memberByEmail = new Map(
+    partnerMembers.map((m) => [(m.email || '').toLowerCase(), m])
+  );
+
   const mapped: CommunicationConversationDto[] = [];
-  const seenPartnerIds = new Set<string>();
 
   for (const r of rows) {
     const isP1 = r.participant1Id === userId;
     const partnerId = isP1 ? r.participant2Id : r.participant1Id;
 
-    // Filter out any legacy conversations with deleted/non-member accounts unless they have active history
-    if (!eligibleIdSet.has(partnerId) && !r.lastMessageText) {
-      continue;
-    }
-    if (seenPartnerIds.has(partnerId)) {
-      continue;
-    }
-    seenPartnerIds.add(partnerId);
+    const u = userMap.get(partnerId);
+    const m =
+      memberMap.get(partnerId) ||
+      (u?.memberId ? memberMap.get(u.memberId) : undefined) ||
+      (u?.email ? memberByEmail.get(u.email.toLowerCase()) : undefined);
 
-    const partner = isP1
-      ? {
-          id: r.participant2Id,
-          name: r.participant2Name,
-          role: r.participant2Role,
-          avatarUrl: r.participant2AvatarUrl,
-        }
-      : {
-          id: r.participant1Id,
-          name: r.participant1Name,
-          role: r.participant1Role,
-          avatarUrl: r.participant1AvatarUrl,
-        };
+    const partnerName =
+      u?.name ||
+      m?.fullName ||
+      (isP1 ? r.participant2Name : r.participant1Name) ||
+      'Workspace Member';
+
+    const partnerRole =
+      m?.designation ||
+      (u?.role === 'OWNER'
+        ? 'Owner & Super Admin'
+        : u?.role === 'ADMIN'
+          ? 'Workspace Administrator'
+          : u?.role || (isP1 ? r.participant2Role : r.participant1Role) || 'Member');
+
+    const partnerAvatar =
+      u?.avatarUrl ||
+      m?.avatarUrl ||
+      (isP1 ? r.participant2AvatarUrl : r.participant1AvatarUrl) ||
+      null;
 
     const unreadCount = isP1 ? r.unreadCountP1 : r.unreadCountP2;
 
     mapped.push({
       id: r.id,
       conversationKey: r.conversationKey,
-      partner,
+      partner: {
+        id: partnerId,
+        name: partnerName,
+        role: partnerRole,
+        avatarUrl: partnerAvatar,
+      },
       lastMessageText: r.lastMessageText,
       lastMessageTimestampMs: Number(r.lastMessageTimestampMs),
       unreadCount,
@@ -418,18 +396,24 @@ export async function markConversationAsRead(
 }
 
 /**
- * Get messages for a conversation ordered chronologically.
+ * Get messages for a conversation ordered chronologically with cursor pagination support.
  */
 export async function getConversationMessages(
-  conversationId: string
+  conversationId: string,
+  cursor?: string,
+  limit = 100
 ): Promise<CommunicationMessageDto[]> {
+  const take = Math.min(Math.max(1, limit), 200);
   const rows = await prisma.communicationMessage.findMany({
-    where: { conversationId },
-    orderBy: { timestampMs: 'asc' },
-    take: 300,
+    where: {
+      conversationId,
+      ...(cursor ? { timestampMs: { lt: BigInt(cursor) } } : {}),
+    },
+    orderBy: { timestampMs: 'desc' },
+    take,
   });
 
-  return rows.map((r) => ({
+  return rows.reverse().map((r) => ({
     id: r.id,
     conversationId: r.conversationId,
     senderId: r.senderId,

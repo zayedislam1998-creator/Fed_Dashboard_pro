@@ -3,6 +3,7 @@ import {
   DEFAULT_ADMIN_NAME,
   DEFAULT_ADMIN_USERNAME,
   hashPasswordScrypt,
+  verifyPasswordScrypt,
   prisma,
 } from './prisma';
 
@@ -345,7 +346,7 @@ export async function syncWorkspaceUsersToMembers(): Promise<void> {
   }
 }
 
-export async function initializeDatabaseEngine(force = false): Promise<void> {
+export async function initializeDatabaseEngine(force = false, rotateOnStartup = false): Promise<void> {
   const now = Date.now();
   if (!force && now - lastInitTimestamp < 15_000) {
     return;
@@ -373,6 +374,9 @@ export async function initializeDatabaseEngine(force = false): Promise<void> {
 
   const envAdminPassword = (process.env.ADMIN_PASSWORD || '').trim();
   const hasEnvPassword = envAdminPassword.length >= 6;
+  const forcePasswordReset =
+    rotateOnStartup && (process.env.RESET_ADMIN_PASSWORD_ON_BOOT === 'true' ||
+      process.env.FORCE_ADMIN_PASSWORD_RESET === 'true');
 
   if (!existingAdmin) {
     await prisma.workspaceUser.create({
@@ -392,15 +396,24 @@ export async function initializeDatabaseEngine(force = false): Promise<void> {
         timestampMs: nowMs,
       },
     });
-  } else if (hasEnvPassword && !existingAdmin.passwordSet) {
-    await prisma.workspaceUser.update({
-      where: { id: existingAdmin.id },
-      data: {
-        passwordHash: hashPasswordScrypt(envAdminPassword),
-        passwordSet: true,
-        updatedAt: nowLabel,
-      },
-    });
+  } else if (hasEnvPassword && (!existingAdmin.passwordSet || forcePasswordReset)) {
+    const alreadyCurrent = existingAdmin.passwordSet && existingAdmin.passwordHash &&
+      verifyPasswordScrypt(envAdminPassword, existingAdmin.passwordHash);
+    if (!alreadyCurrent) {
+      const passwordHash = hashPasswordScrypt(envAdminPassword);
+      await prisma.$transaction(async (tx) => {
+        const changed = await tx.workspaceUser.updateMany({
+          where: { id: existingAdmin.id, passwordHash: existingAdmin.passwordHash },
+          data: { passwordHash, passwordSet: true, updatedAt: nowLabel },
+        });
+        if (changed.count && forcePasswordReset) {
+          await tx.workspaceSession.updateMany({
+            where: { userId: existingAdmin.id, revokedAt: null },
+            data: { revokedAt: new Date().toISOString() },
+          });
+        }
+      });
+    }
   }
 
   // 2. Ensure default system settings row

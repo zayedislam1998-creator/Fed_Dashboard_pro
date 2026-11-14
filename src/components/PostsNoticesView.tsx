@@ -1,3 +1,4 @@
+import { NoticeEmailPanel } from './mail/NoticeEmailPanel';
 import React, { Suspense, lazy, useState, useEffect } from 'react';
 import {
   Megaphone,
@@ -618,6 +619,7 @@ export const PostsNoticesView: React.FC<PostsNoticesViewProps> = ({
                     {selectedItem.content}
                   </div>
 
+                  {selectedItem.type === 'NOTICE' && <NoticeEmailPanel key={selectedItem.id} noticeId={selectedItem.id} />}
                   {selectedItem.attachments && selectedItem.attachments.length > 0 && (
                     <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
                       <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">

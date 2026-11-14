@@ -21,3 +21,8 @@ storage/
 .vscode/
 Thumbs.db
 *.tsbuildinfo
+.backup*/
+*.bak
+*.zip
+
+

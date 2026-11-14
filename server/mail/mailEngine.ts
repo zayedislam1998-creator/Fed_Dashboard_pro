@@ -260,8 +260,14 @@ export async function syncAccountImapInbox(
 
 export function startImapBackgroundWatcher() {
   let isWatcherRunning = false;
+  let lastSyncCompletedAt = 0;
+  const SYNC_BACKOFF_INTERVAL_MS = 60_000; // 60 seconds minimum interval between account sync cycles
+
   setInterval(async () => {
-    if (isWatcherRunning || sseClients.size === 0) return;
+    const now = Date.now();
+    if (isWatcherRunning || sseClients.size === 0 || now - lastSyncCompletedAt < SYNC_BACKOFF_INTERVAL_MS) {
+      return;
+    }
     isWatcherRunning = true;
     try {
       const serverAccounts = await prisma.serverMailAccount.findMany();
@@ -272,9 +278,10 @@ export function startImapBackgroundWatcher() {
     } catch {
       // Skip if PostgreSQL isn't ready yet
     } finally {
+      lastSyncCompletedAt = Date.now();
       isWatcherRunning = false;
     }
-  }, 8000);
+  }, 15_000);
 }
 
 async function verifyMailConnection(params: {

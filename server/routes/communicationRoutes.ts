@@ -4,7 +4,6 @@ import fs from 'fs';
 import multer from 'multer';
 import { ensureExternalStorageDirs, prisma, UPLOADS_DIR } from '../db/prisma';
 import { optimizeUploadedImageBuffer } from '../services/storageService';
-import { syncWorkspaceUsersToMembers } from '../db/initEngine';
 import { requireAuth } from '../auth/sessionAuth';
 import { asyncHandler, broadcastRealtimeEvent } from '../realtime';
 import {
@@ -53,8 +52,6 @@ export function registerCommunicationRoutes(app: express.Express) {
         res.status(400).json({ error: 'Invalid target user ID.' });
         return;
       }
-
-      await syncWorkspaceUsersToMembers();
 
       // Resolve target whether passed as WorkspaceUser.id, WorkspaceMember.id, or email
       let targetUser = await prisma.workspaceUser.findFirst({
@@ -137,6 +134,8 @@ export function registerCommunicationRoutes(app: express.Express) {
     asyncHandler(async (req, res) => {
       const user = req.auth!.user;
       const convId = req.params.id;
+      const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 100;
 
       const conv = await prisma.communicationConversation.findUnique({
         where: { id: convId },
@@ -154,7 +153,7 @@ export function registerCommunicationRoutes(app: express.Express) {
         return;
       }
 
-      const messages = await getConversationMessages(convId);
+      const messages = await getConversationMessages(convId, cursor, limit);
       res.json({ messages });
     })
   );
@@ -357,13 +356,23 @@ export function registerCommunicationRoutes(app: express.Express) {
     requireAuth,
     asyncHandler(async (req, res) => {
       const currentUser = req.auth!.user;
-      await syncWorkspaceUsersToMembers();
+      const q = String(req.query.q || '').trim();
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 100), 200);
 
       const [users, members] = await Promise.all([
         prisma.workspaceUser.findMany({
           where: {
             isActive: true,
             role: { in: ['OWNER', 'ADMIN', 'MEMBER'] },
+            ...(q
+              ? {
+                  OR: [
+                    { name: { contains: q, mode: 'insensitive' } },
+                    { email: { contains: q, mode: 'insensitive' } },
+                    { username: { contains: q, mode: 'insensitive' } },
+                  ],
+                }
+              : {}),
           },
           select: {
             id: true,
@@ -374,9 +383,20 @@ export function registerCommunicationRoutes(app: express.Express) {
             phoneNumber: true,
             memberId: true,
           },
-          orderBy: { timestampMs: 'asc' },
+          orderBy: { name: 'asc' },
+          take: limit,
         }),
         prisma.workspaceMember.findMany({
+          where: q
+            ? {
+                OR: [
+                  { fullName: { contains: q, mode: 'insensitive' } },
+                  { email: { contains: q, mode: 'insensitive' } },
+                  { designation: { contains: q, mode: 'insensitive' } },
+                  { teamName: { contains: q, mode: 'insensitive' } },
+                ],
+              }
+            : undefined,
           select: {
             id: true,
             fullName: true,
@@ -386,7 +406,8 @@ export function registerCommunicationRoutes(app: express.Express) {
             avatarUrl: true,
             phone: true,
           },
-          orderBy: { timestampMs: 'asc' },
+          orderBy: { fullName: 'asc' },
+          take: limit,
         }),
       ]);
 

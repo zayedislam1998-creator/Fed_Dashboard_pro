@@ -134,8 +134,7 @@ export function decryptSecret(cipherText: string): string {
 }
 
 export const DEFAULT_ADMIN_USERNAME =
-  (process.env.ADMIN_USERNAME || 'zayed.islam1998@gmail.com').trim() ||
-  'zayed.islam1998@gmail.com';
+  (process.env.ADMIN_USERNAME || 'admin@workspace.local').trim();
 export const DEFAULT_ADMIN_NAME =
   (process.env.ADMIN_NAME || 'Administrator').trim() || 'Administrator';
 

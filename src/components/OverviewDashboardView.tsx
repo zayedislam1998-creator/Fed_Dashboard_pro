@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSubmissionRequest } from '../services/useSubmissionRequest';
 import { motion } from 'motion/react';
 import {
   CheckSquare,
@@ -17,6 +18,7 @@ import {
   FileText,
   Sparkles,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 import { subscribeWorkspaceEvents } from '../services/realtimeBus';
 import {
@@ -137,6 +139,10 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
 
   const [categoryFilter, setCategoryFilter] = useState<TrackerCategory>('ALL');
 
+  // On-demand Modals & Light-weight View state
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [showAllTracker, setShowAllTracker] = useState(false);
+
   // Drill-down Inspector Modal State
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<CmhSubmission | null>(null);
@@ -153,6 +159,7 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
   const [quickSubmitEmail, setQuickSubmitEmail] = useState('');
   const [quickSubmitNote, setQuickSubmitNote] = useState('');
   const [quickSubmitDeliverable, setQuickSubmitDeliverable] = useState('');
+  const submissionRequest = useSubmissionRequest();
   const [submittingEntry, setSubmittingEntry] = useState(false);
 
   const loadOverviewData = async (silent = false) => {
@@ -171,19 +178,8 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
   };
 
   useEffect(() => {
+    // Single initial fetch only — NO aggressive background auto-sync polling
     loadOverviewData(false);
-    const unsubscribe = subscribeWorkspaceEvents((eventName) => {
-      if (
-        eventName === 'cmh:updated' ||
-        eventName === 'members:updated' ||
-        eventName === 'form:submitted' ||
-        eventName === 'workspace:updated' ||
-        eventName === 'notification:new'
-      ) {
-        loadOverviewData(true);
-      }
-    });
-    return unsubscribe;
   }, []);
 
   // Build Unified Trackable Items (Tasks, Projects, Forms) with Target & Submitted circles
@@ -429,7 +425,7 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
           : selectedItem.type === 'PROJECT'
           ? 'project'
           : 'form';
-      await submitPublicCmhResponse(targetTypeLower, selectedItem.id, {
+      const payload = {
         submitterName: quickSubmitName.trim(),
         submitterEmail: quickSubmitEmail.trim() || 'member@workspace.local',
         values: {
@@ -438,7 +434,9 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
           'Submission Notes':
             quickSubmitNote.trim() || 'Submitted via CEO Executive Overview',
         },
-      });
+      };
+      await submitPublicCmhResponse(targetTypeLower, selectedItem.id, payload, submissionRequest.getId([targetTypeLower, selectedItem.id, payload]));
+      submissionRequest.clear();
       await loadOverviewData();
       setQuickSubmitName('');
       setQuickSubmitEmail('');
@@ -843,12 +841,13 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-              {filteredItems.map((item) => {
-                const radius = 26;
-                const circumference = 2 * Math.PI * radius;
-                const strokeOffset =
-                  circumference - (circumference * item.completionPct) / 100;
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                {(showAllTracker ? filteredItems : filteredItems.slice(0, 4)).map((item) => {
+                  const radius = 26;
+                  const circumference = 2 * Math.PI * radius;
+                  const strokeOffset =
+                    circumference - (circumference * item.completionPct) / 100;
 
                 return (
                   <div
@@ -984,184 +983,252 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
                 );
               })}
             </div>
-          )}
+
+            {filteredItems.length > 4 && (
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span className="text-slate-500 font-semibold">
+                  {showAllTracker
+                    ? `Showing all ${filteredItems.length} items`
+                    : `Showing top 4 priority items of ${filteredItems.length}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllTracker((prev) => !prev)}
+                  className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 transition-all cursor-pointer shadow-2xs"
+                >
+                  {showAllTracker ? 'Show Less (Priority Only)' : `Show All (${filteredItems.length} Items)`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         </div>
 
         {/* =====================================================================
-            SECTION 3: MULTI-PIE CHARTS & GROWTH ANALYTICS
-            1. Overall Submission Pie Chart (Submitted vs Remaining)
-            2. Tasks & Projects Status Pie Chart (Workflow Breakdown)
-            3. Category Growth & Fill-Rate Bars
+            COMPACT EXECUTIVE ANALYTICS BANNER (Keeps Home Page Clean & Super-Fast)
             ===================================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
-          {/* PIE CHART 1: TOTAL TARGET VS SUBMITTED VS REMAINING */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+              <PieChartIcon className="w-5 h-5 text-indigo-300" />
+            </div>
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                Pie Chart 01 · Submission Ratio
-              </span>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
-                Overall Filled vs Remaining
-              </h3>
-            </div>
-
-            <div className="my-4 flex items-center justify-center">
-              <MultiSegmentDonutChart
-                size={152}
-                strokeWidth={20}
-                centerTitle={`${overallGrowthPct}%`}
-                centerSub={`${overallSubmissionTotal}/${overallTargetTotal} Filled`}
-                segments={[
-                  {
-                    label: 'Submitted',
-                    value: overallSubmissionTotal,
-                    color: '#10B981',
-                  },
-                  {
-                    label: 'Remaining',
-                    value: Math.max(1, overallRemainingTotal),
-                    color: '#EF4444',
-                  },
-                ]}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500">Submitted</p>
-                  <p className="font-extrabold text-slate-900 dark:text-white tabular-nums">
-                    {overallSubmissionTotal} People
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-rose-50/70 dark:bg-rose-950/30">
-                <span className="w-3 h-3 rounded-full bg-rose-500 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500">Remaining</p>
-                  <p className="font-extrabold text-slate-900 dark:text-white tabular-nums">
-                    {overallRemainingTotal} People
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-sm font-bold tracking-tight">Executive Pie Charts & Fill Velocity</h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Submission ratios ({overallSubmissionTotal}/{overallTargetTotal} Filled), status distribution & velocity graphs
+              </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAnalyticsModal(true)}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer self-start sm:self-auto"
+          >
+            Open Analytics Mode →
+          </button>
+        </div>
+      </div>
 
-          {/* PIE CHART 2: TASK & PROJECT STATUS BREAKDOWN */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                Pie Chart 02 · Workflow Progress
-              </span>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
-                Task & Project Status Distribution
-              </h3>
-            </div>
-
-            <div className="my-4 flex items-center justify-center">
-              <MultiSegmentDonutChart
-                size={152}
-                strokeWidth={20}
-                centerTitle={`${tasks.length + projects.length}`}
-                centerSub="Active Items"
-                segments={statusPieSegments}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-              {statusPieSegments.map((seg, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60"
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: seg.color }}
-                    />
-                    <span className="font-semibold text-slate-600 dark:text-slate-300 truncate">
-                      {seg.label}
-                    </span>
-                  </div>
-                  <span className="font-extrabold text-slate-900 dark:text-white tabular-nums ml-1">
-                    {seg.value}
-                  </span>
+      {/* =======================================================================
+          ANALYTICS & PIE CHARTS MODAL (Loaded On-Demand to avoid Main Page Lag)
+          ======================================================================= */}
+      {showAnalyticsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/50 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 flex items-center justify-center">
+                  <PieChartIcon className="w-4 h-4" />
                 </div>
-              ))}
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                    Executive Analytics & Submission Ratios
+                  </h3>
+                  <p className="text-[11px] text-slate-500">Live submission ratios, status breakdown & fill velocity</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAnalyticsModal(false)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          </div>
 
-          {/* CHART 3: GROWTH & COMPLETION ANALYTICS PER CATEGORY */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-                Growth Chart 03 · Category Velocity
-              </span>
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
-                Category Growth & Fill Rate
-              </h3>
-            </div>
-
-            <div className="my-3 space-y-3.5">
-              {[
-                {
-                  label: 'Tasks Submission Growth',
-                  submitted: taskStats.totalSubmitted,
-                  target: taskStats.totalTarget,
-                  pct: taskStats.pct,
-                  barColor: 'bg-blue-600',
-                },
-                {
-                  label: 'Projects Milestone Growth',
-                  submitted: projectStats.totalSubmitted,
-                  target: projectStats.totalTarget,
-                  pct: projectStats.pct,
-                  barColor: 'bg-purple-600',
-                },
-                {
-                  label: 'Forms Response Growth',
-                  submitted: formStats.totalSubmitted,
-                  target: formStats.totalTarget,
-                  pct: formStats.pct,
-                  barColor: 'bg-indigo-600',
-                },
-                {
-                  label: 'Overall Workspace Completion',
-                  submitted: overallSubmissionTotal,
-                  target: overallTargetTotal,
-                  pct: overallGrowthPct,
-                  barColor: 'bg-emerald-600',
-                },
-              ].map((row, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-700 dark:text-slate-200">
-                      {row.label}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
+                {/* PIE CHART 1: TOTAL TARGET VS SUBMITTED VS REMAINING */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Pie Chart 01 · Submission Ratio
                     </span>
-                    <span className="font-extrabold text-slate-900 dark:text-white tabular-nums">
-                      {row.submitted}/{row.target} ({row.pct}%)
-                    </span>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
+                      Overall Filled vs Remaining
+                    </h3>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${row.barColor} transition-all duration-500`}
-                      style={{ width: `${Math.max(4, row.pct)}%` }}
+
+                  <div className="my-4 flex items-center justify-center">
+                    <MultiSegmentDonutChart
+                      size={152}
+                      strokeWidth={20}
+                      centerTitle={`${overallGrowthPct}%`}
+                      centerSub={`${overallSubmissionTotal}/${overallTargetTotal} Filled`}
+                      segments={[
+                        {
+                          label: 'Submitted',
+                          value: overallSubmissionTotal,
+                          color: '#10B981',
+                        },
+                        {
+                          label: 'Remaining',
+                          value: Math.max(1, overallRemainingTotal),
+                          color: '#EF4444',
+                        },
+                      ]}
                     />
                   </div>
-                </div>
-              ))}
-            </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-              <span>Live submission tracking vs target</span>
-              <span className="font-bold text-emerald-600 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> Real-Time Sync
-              </span>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30">
+                      <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500">Submitted</p>
+                        <p className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {overallSubmissionTotal} People
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-rose-50/70 dark:bg-rose-950/30">
+                      <span className="w-3 h-3 rounded-full bg-rose-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500">Remaining</p>
+                        <p className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {overallRemainingTotal} People
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PIE CHART 2: TASK & PROJECT STATUS BREAKDOWN */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                      Pie Chart 02 · Workflow Progress
+                    </span>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
+                      Task & Project Status Distribution
+                    </h3>
+                  </div>
+
+                  <div className="my-4 flex items-center justify-center">
+                    <MultiSegmentDonutChart
+                      size={152}
+                      strokeWidth={20}
+                      centerTitle={`${tasks.length + projects.length}`}
+                      centerSub="Active Items"
+                      segments={statusPieSegments}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                    {statusPieSegments.map((seg, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60"
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: seg.color }}
+                          />
+                          <span className="font-semibold text-slate-600 dark:text-slate-300 truncate">
+                            {seg.label}
+                          </span>
+                        </div>
+                        <span className="font-extrabold text-slate-900 dark:text-white tabular-nums ml-1">
+                          {seg.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* CHART 3: GROWTH & COMPLETION ANALYTICS PER CATEGORY */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                      Growth Chart 03 · Category Velocity
+                    </span>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mt-0.5">
+                      Category Growth & Fill Rate
+                    </h3>
+                  </div>
+
+                  <div className="my-3 space-y-3.5">
+                    {[
+                      {
+                        label: 'Tasks Submission Growth',
+                        submitted: taskStats.totalSubmitted,
+                        target: taskStats.totalTarget,
+                        pct: taskStats.pct,
+                        barColor: 'bg-blue-600',
+                      },
+                      {
+                        label: 'Projects Milestone Growth',
+                        submitted: projectStats.totalSubmitted,
+                        target: projectStats.totalTarget,
+                        pct: projectStats.pct,
+                        barColor: 'bg-purple-600',
+                      },
+                      {
+                        label: 'Forms Response Growth',
+                        submitted: formStats.totalSubmitted,
+                        target: formStats.totalTarget,
+                        pct: formStats.pct,
+                        barColor: 'bg-indigo-600',
+                      },
+                      {
+                        label: 'Overall Workspace Completion',
+                        submitted: overallSubmissionTotal,
+                        target: overallTargetTotal,
+                        pct: overallGrowthPct,
+                        barColor: 'bg-emerald-600',
+                      },
+                    ].map((row, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            {row.label}
+                          </span>
+                          <span className="font-extrabold text-slate-900 dark:text-white tabular-nums">
+                            {row.submitted}/{row.target} ({row.pct}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${row.barColor} transition-all duration-500`}
+                            style={{ width: `${Math.max(4, row.pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Live submission tracking vs target</span>
+                    <span className="font-bold text-emerald-600 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> Real-Time Analytics
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* =======================================================================
           DRILL-DOWN MODAL: Who Submitted, What They Submitted & Who Is Remaining

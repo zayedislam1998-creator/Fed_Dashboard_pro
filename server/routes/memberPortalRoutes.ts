@@ -28,6 +28,7 @@ import {
   deleteWorkspaceFileAssets,
   optimizeUploadedImageBuffer,
 } from '../services/storageService';
+import { appendTaskSubmissionAtomic, createSubmissionId } from '../services/atomicSubmissionService';
 
 function stripBigIntTimestamp<T extends { timestampMs: bigint }>(row: T) {
   const { timestampMs, ...rest } = row;
@@ -91,8 +92,13 @@ export function registerMemberPortalRoutes(app: express.Express) {
         return;
       }
 
+      const requestId = req.get('Idempotency-Key');
+      if (requestId && !/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)) {
+        res.status(400).json({ error: 'Invalid submission request ID.' });
+        return;
+      }
       const submission = {
-        id: `cmh-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: createSubmissionId(requestId ? user.id + '-' + requestId : undefined),
         targetType: 'TASK',
         targetId: task.id,
         targetTitle: task.title,
@@ -112,28 +118,26 @@ export function registerMemberPortalRoutes(app: express.Express) {
         },
       };
 
-      const prevSubs = Array.isArray(task.submissionsJson) ? (task.submissionsJson as any[]) : [];
-      const updated = await prisma.cmhTask.update({
-        where: { id: task.id },
-        data: {
-          ...(statusUpdate ? { status: String(statusUpdate) } : {}),
-          submissionsJson: [submission, ...prevSubs],
-          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      });
+      const { updated, submission: savedSubmission, duplicate } = await appendTaskSubmissionAtomic(
+        task.id,
+        submission,
+        statusUpdate ? String(statusUpdate) : undefined
+      );
 
-      await recordAndBroadcastNotification({
-        type: 'cmh_activity',
-        title: `Task Update by ${user.name}: ${task.title}`,
-        description: statusUpdate
-          ? `Moved to "${statusUpdate}"${note ? ` — ${String(note).slice(0, 80)}` : ''}`
-          : String(note || 'Submitted progress update'),
-        module: 'cmh_tasks',
-        targetId: task.id,
-      });
+      if (!duplicate) {
+        await recordAndBroadcastNotification({
+          type: 'cmh_activity',
+          title: `Task Update by ${user.name}: ${task.title}`,
+          description: statusUpdate
+            ? `Moved to "${statusUpdate}"${note ? ` — ${String(note).slice(0, 80)}` : ''}`
+            : String(note || 'Submitted progress update'),
+          module: 'cmh_tasks',
+          targetId: task.id,
+        });
 
-      broadcastRealtimeEvent('cmh:updated', { type: 'task', item: toCmhTaskDto(updated) });
-      res.json({ ok: true, task: toCmhTaskDto(updated), submission });
+        broadcastRealtimeEvent('cmh:updated', { type: 'task', item: toCmhTaskDto(updated) });
+      }
+      res.json({ ok: true, task: toCmhTaskDto(updated), submission: savedSubmission });
     })
   );
 

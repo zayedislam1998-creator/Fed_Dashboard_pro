@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSubmissionRequest } from '../services/useSubmissionRequest';
 import {
   CheckCircle2,
   ArrowLeft,
@@ -40,6 +41,7 @@ export const PublicCmhPortalView: React.FC<PublicCmhPortalViewProps> = ({
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const submissionRequest = useSubmissionRequest();
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedMsg, setSubmittedMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -98,13 +100,15 @@ export const PublicCmhPortalView: React.FC<PublicCmhPortalViewProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
-      const res = await submitPublicCmhResponse(targetType, targetId, {
+      const payload = {
         submitterName: submitterName.trim() || submitterEmail.split('@')[0],
         submitterEmail: submitterEmail.trim(),
         values: fieldValues,
         statusUpdate:
           targetType === 'task' || targetType === 'project' ? statusUpdate : undefined,
-      });
+      };
+      const res = await submitPublicCmhResponse(targetType, targetId, payload, submissionRequest.getId([targetType, targetId, payload]));
+      submissionRequest.clear();
       setSubmittedMsg(
         res.confirmationMessage ||
           'Your submission has been recorded and sent to the Admin in real time.'

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Menu,
@@ -84,39 +84,142 @@ import {
   fetchSystemSettings,
   fetchWorkspaceTeamsAndMembers,
 } from './services/workspaceApi';
-import { GmailView } from './components/GmailView';
-import { ServerMailView, ServerMailFolder } from './components/ServerMailView';
-import { BulkMailView } from './components/BulkMailView';
-import { DocsView, DocsSubTab } from './components/DocsView';
-import { SlidesView, SlidesSubTab } from './components/SlidesView';
-import { FormsView, FormsSubTab } from './components/FormsView';
-import { PublicFormView } from './components/PublicFormView';
-import { MeetView, MeetSubTab } from './components/MeetView';
-import { TeamsView, TeamsSubTab } from './components/TeamsView';
-import { PublicMemberInviteView } from './components/PublicMemberInviteView';
-import { PostsNoticesView, PostsNoticesSubTab } from './components/PostsNoticesView';
-import { FileManagerView, FileManagerSubTab } from './components/FileManagerView';
-import { CmhTasksView, CmhTasksSubTab } from './components/CmhTasksView';
-import { CmhProjectsView, CmhProjectsSubTab } from './components/CmhProjectsView';
-import { CmhFormBuilderView, CmhFormBuilderSubTab } from './components/CmhFormBuilderView';
-import { PublicCmhPortalView } from './components/PublicCmhPortalView';
-import { SettingsView, SettingsSubTab } from './components/SettingsView';
-import { SheetsView, SheetsSubTab } from './components/SheetsView';
-import { CalendarView, CalendarSubTab } from './components/CalendarView';
-import { FinanceView, FinanceSubTab } from './components/FinanceView';
-import { CrmTicketsView, CrmSubTab } from './components/CrmTicketsView';
-import { HrManagementView, HrSubTab } from './components/HrManagementView';
-import { TeamChatView, ChatSubTab } from './components/TeamChatView';
-import { WikiKnowledgeView, WikiSubTab } from './components/WikiKnowledgeView';
-import { AutomationEngineView, AutomationSubTab } from './components/AutomationEngineView';
-import { OverviewDashboardView } from './components/OverviewDashboardView';
-import { ExecutiveProfileView } from './components/profile/ExecutiveProfileView';
-import { CommunicationView } from './components/communication/CommunicationView';
+import type { ServerMailFolder } from './components/ServerMailView';
+import type { DocsSubTab } from './components/DocsView';
+import type { SlidesSubTab } from './components/SlidesView';
+import type { FormsSubTab } from './components/FormsView';
+import type { MeetSubTab } from './components/MeetView';
+import type { TeamsSubTab } from './components/TeamsView';
+import type { PostsNoticesSubTab } from './components/PostsNoticesView';
+import type { FileManagerSubTab } from './components/FileManagerView';
+import type { CmhTasksSubTab } from './components/CmhTasksView';
+import type { CmhProjectsSubTab } from './components/CmhProjectsView';
+import type { CmhFormBuilderSubTab } from './components/CmhFormBuilderView';
+import type { SettingsSubTab } from './components/SettingsView';
+import type { SheetsSubTab } from './components/SheetsView';
+import type { CalendarSubTab } from './components/CalendarView';
+import type { FinanceSubTab } from './components/FinanceView';
+import type { CrmSubTab } from './components/CrmTicketsView';
+import type { HrSubTab } from './components/HrManagementView';
+import type { ChatSubTab } from './components/TeamChatView';
+import type { WikiSubTab } from './components/WikiKnowledgeView';
+import type { AutomationSubTab } from './components/AutomationEngineView';
 import { subscribeWorkspaceEvents } from './services/realtimeBus';
-import { FloatingMessengerWidget } from './components/communication/FloatingMessengerWidget';
-import { SimpleDashboardView } from './components/SimpleDashboardView';
-import { AdminPanelView } from './components/AdminPanelView';
-import { MemberPortalShell } from './components/member/MemberPortalShell';
+
+// Fast Dynamic Code Splitting for all modules (eliminates massive bundle download on initial page load)
+const WorkspaceFeedView = lazy(() =>
+  import('./components/WorkspaceFeedView').then((m) => ({ default: m.WorkspaceFeedView }))
+);
+const feedModuleMap: Record<string, string> = {
+  folders: 'files', members: 'teams', team_groups: 'teams', invoice: 'finance',
+  expense: 'finance', lead: 'crm', ticket: 'crm', resume: 'profile', corporate: 'profile',
+};
+
+const OverviewDashboardView = lazy(() =>
+  import('./components/OverviewDashboardView').then((m) => ({ default: m.OverviewDashboardView }))
+);
+const GmailView = lazy(() =>
+  import('./components/GmailView').then((m) => ({ default: m.GmailView }))
+);
+const ServerMailView = lazy(() =>
+  import('./components/ServerMailView').then((m) => ({ default: m.ServerMailView }))
+);
+const BulkMailView = lazy(() =>
+  import('./components/BulkMailView').then((m) => ({ default: m.BulkMailView }))
+);
+const DocsView = lazy(() =>
+  import('./components/DocsView').then((m) => ({ default: m.DocsView }))
+);
+const SlidesView = lazy(() =>
+  import('./components/SlidesView').then((m) => ({ default: m.SlidesView }))
+);
+const FormsView = lazy(() =>
+  import('./components/FormsView').then((m) => ({ default: m.FormsView }))
+);
+const PublicFormView = lazy(() =>
+  import('./components/PublicFormView').then((m) => ({ default: m.PublicFormView }))
+);
+const MeetView = lazy(() =>
+  import('./components/MeetView').then((m) => ({ default: m.MeetView }))
+);
+const TeamsView = lazy(() =>
+  import('./components/TeamsView').then((m) => ({ default: m.TeamsView }))
+);
+const PublicMemberInviteView = lazy(() =>
+  import('./components/PublicMemberInviteView').then((m) => ({ default: m.PublicMemberInviteView }))
+);
+const PostsNoticesView = lazy(() =>
+  import('./components/PostsNoticesView').then((m) => ({ default: m.PostsNoticesView }))
+);
+const FileManagerView = lazy(() =>
+  import('./components/FileManagerView').then((m) => ({ default: m.FileManagerView }))
+);
+const CmhTasksView = lazy(() =>
+  import('./components/CmhTasksView').then((m) => ({ default: m.CmhTasksView }))
+);
+const CmhProjectsView = lazy(() =>
+  import('./components/CmhProjectsView').then((m) => ({ default: m.CmhProjectsView }))
+);
+const CmhFormBuilderView = lazy(() =>
+  import('./components/CmhFormBuilderView').then((m) => ({ default: m.CmhFormBuilderView }))
+);
+const PublicCmhPortalView = lazy(() =>
+  import('./components/PublicCmhPortalView').then((m) => ({ default: m.PublicCmhPortalView }))
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+const SheetsView = lazy(() =>
+  import('./components/SheetsView').then((m) => ({ default: m.SheetsView }))
+);
+const CalendarView = lazy(() =>
+  import('./components/CalendarView').then((m) => ({ default: m.CalendarView }))
+);
+const FinanceView = lazy(() =>
+  import('./components/FinanceView').then((m) => ({ default: m.FinanceView }))
+);
+const CrmTicketsView = lazy(() =>
+  import('./components/CrmTicketsView').then((m) => ({ default: m.CrmTicketsView }))
+);
+const HrManagementView = lazy(() =>
+  import('./components/HrManagementView').then((m) => ({ default: m.HrManagementView }))
+);
+const TeamChatView = lazy(() =>
+  import('./components/TeamChatView').then((m) => ({ default: m.TeamChatView }))
+);
+const WikiKnowledgeView = lazy(() =>
+  import('./components/WikiKnowledgeView').then((m) => ({ default: m.WikiKnowledgeView }))
+);
+const AutomationEngineView = lazy(() =>
+  import('./components/AutomationEngineView').then((m) => ({ default: m.AutomationEngineView }))
+);
+const ExecutiveProfileView = lazy(() =>
+  import('./components/profile/ExecutiveProfileView').then((m) => ({ default: m.ExecutiveProfileView }))
+);
+const CommunicationView = lazy(() =>
+  import('./components/communication/CommunicationView').then((m) => ({ default: m.CommunicationView }))
+);
+const FloatingMessengerWidget = lazy(() =>
+  import('./components/communication/FloatingMessengerWidget').then((m) => ({ default: m.FloatingMessengerWidget }))
+);
+const SimpleDashboardView = lazy(() =>
+  import('./components/SimpleDashboardView').then((m) => ({ default: m.SimpleDashboardView }))
+);
+const AdminPanelView = lazy(() =>
+  import('./components/AdminPanelView').then((m) => ({ default: m.AdminPanelView }))
+);
+const MemberPortalShell = lazy(() =>
+  import('./components/member/MemberPortalShell').then((m) => ({ default: m.MemberPortalShell }))
+);
+
+const ModuleLoadingFallback: React.FC = () => (
+  <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500 animate-in fade-in duration-150">
+    <div className="flex items-center gap-2.5 text-xs font-semibold">
+      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      <span>Loading module...</span>
+    </div>
+  </div>
+);
 import {
   type EvaluatedCapabilitiesClient,
   fetchWorkspaceSession,
@@ -125,6 +228,7 @@ import {
 } from './services/workspaceAuth';
 
 export type WorkspaceModule =
+  | 'main_feed'
   | 'overview'
   | 'admin_panel'
   | 'gmail'
@@ -201,6 +305,8 @@ export default function App() {
   const [wsCapabilities, setWsCapabilities] = useState<EvaluatedCapabilitiesClient | null>(null);
 
   const [activeModule, setActiveModule] = useState<WorkspaceModule>('overview');
+  const landingApplied = useRef(false);
+  const [feedSource, setFeedSource] = useState<{ type: string; id: string } | null>(null);
   const [needsAuth, setNeedsAuth] = useState<boolean>(true);
   const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -220,6 +326,7 @@ export default function App() {
   const [isCustomFoldersExpanded, setIsCustomFoldersExpanded] = useState<boolean>(true);
   const [isAppsSectionExpanded, setIsAppsSectionExpanded] = useState<boolean>(true);
   const [isCmhSectionExpanded, setIsCmhSectionExpanded] = useState<boolean>(true);
+  const [isMoreToolsExpanded, setIsMoreToolsExpanded] = useState<boolean>(false);
 
   // Module-Specific Sub-Navigation State (Teams, Posts & Notices, File Manager, Docs, Forms, Meet, CMH App)
   const [teamsSubTab, setTeamsSubTab] = useState<TeamsSubTab>('all_members');
@@ -294,6 +401,29 @@ export default function App() {
     root.setAttribute('data-accent', accentTheme);
   }, [isDarkMode, accentTheme]);
 
+  useEffect(() => {
+    const MORE_TOOLS_MODULES: WorkspaceModule[] = [
+      'cmh_forms',
+      'docs',
+      'forms',
+      'chat',
+      'bulk',
+      'meet',
+      'files',
+      'slides',
+      'sheets',
+      'calendar',
+      'finance',
+      'crm',
+      'hr',
+      'wiki',
+      'automations',
+    ];
+    if (MORE_TOOLS_MODULES.includes(activeModule)) {
+      setIsMoreToolsExpanded(true);
+    }
+  }, [activeModule]);
+
   const refreshWorkspaceSession = () => {
     setWsSessionLoading(true);
     fetchWorkspaceSession()
@@ -350,6 +480,14 @@ export default function App() {
     // Load global system settings (Workspace branding title, etc.)
     fetchSystemSettings()
       .then((res) => {
+        if (!landingApplied.current && res.settings?.defaultLandingModule) {
+          const supported = ['main_feed', 'overview', 'cmh_tasks', 'cmh_projects', 'gmail', 'server_mail'];
+          const configured = res.settings.defaultLandingModule;
+          if (supported.includes(configured)) {
+            setActiveModule((current) => current === 'overview' ? configured as WorkspaceModule : current);
+          }
+          landingApplied.current = true;
+        }
         if (res.settings?.workspaceName) {
           setWorkspaceTitle(res.settings.workspaceName);
           document.title = res.settings.workspaceName;
@@ -366,13 +504,13 @@ export default function App() {
           prev.some((n) => n.id === payload.id) ? prev : [payload, ...prev].slice(0, 60)
         );
       } else if (eventName === 'notification:read') {
-        fetchNotifications()
-          .then((loadedNotifs) => setNotifications(loadedNotifs))
-          .catch(() => {});
+        if (payload?.id) {
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === payload.id ? { ...n, isRead: true } : n))
+          );
+        }
       } else if (eventName === 'notification:cleared') {
         setNotifications([]);
-      } else if (eventName === 'members:updated') {
-        fetchWorkspaceTeamsAndMembers().catch(() => {});
       } else if (eventName === 'mail:arrived' && payload?.message) {
         setRealtimeServerMailMsg(payload.message);
       }
@@ -486,6 +624,7 @@ export default function App() {
     WorkspaceModule,
     { title: string; colorClass: string; icon: React.ComponentType<{ className?: string }> }
   > = {
+    main_feed: { title: 'Main', colorClass: 'text-[#0B57D0]', icon: LayoutGrid },
     overview: { title: 'Overview', colorClass: 'text-[#0B57D0]', icon: LayoutDashboard },
     admin_panel: { title: 'Admin & Access Control', colorClass: 'text-[#0B57D0]', icon: ShieldCheck },
     gmail: { title: 'Gmail', colorClass: 'text-[#EA4335]', icon: Mail },
@@ -597,6 +736,12 @@ export default function App() {
               {(
                 [
                   {
+                    id: 'main_feed',
+                    label: 'Main',
+                    icon: LayoutGrid,
+                    color: 'text-[#0B57D0]',
+                  },
+                  {
                     id: 'overview',
                     label: 'Overview',
                     icon: LayoutDashboard,
@@ -621,12 +766,6 @@ export default function App() {
                     color: 'text-[#7C3AED]',
                   },
                   {
-                    id: 'cmh_forms',
-                    label: 'Form Builder',
-                    icon: Blocks,
-                    color: 'text-[#0B57D0]',
-                  },
-                  {
                     id: 'teams',
                     label: 'Teams',
                     icon: Users,
@@ -637,18 +776,6 @@ export default function App() {
                     label: 'Posts & Notices',
                     icon: Megaphone,
                     color: 'text-[#D97706]',
-                  },
-                  {
-                    id: 'docs',
-                    label: 'Docs',
-                    icon: FileText,
-                    color: 'text-[#2684FC]',
-                  },
-                  {
-                    id: 'forms',
-                    label: 'Forms',
-                    icon: ClipboardList,
-                    color: 'text-[#673AB7]',
                   },
                   {
                     id: 'communication',
@@ -680,11 +807,8 @@ export default function App() {
                       setActiveModule(item.id);
                       if (item.id === 'cmh_tasks') setCmhTasksSubTab('all_tasks');
                       if (item.id === 'cmh_projects') setCmhProjectsSubTab('all_projects');
-                      if (item.id === 'cmh_forms') setCmhFormsSubTab('all_forms');
                       if (item.id === 'teams') setTeamsSubTab('all_members');
                       if (item.id === 'posts') setPostsSubTab('feed');
-                      if (item.id === 'docs') setDocsSubTab('all_docs');
-                      if (item.id === 'forms') setFormsSubTab('all_forms');
                       if (item.id === 'profile') {
                         setViewingProfileMemberId(null);
                         setIsDesktopDrawerOpen(false); // Auto collapse drawer!
@@ -750,18 +874,94 @@ export default function App() {
             <div className="mt-1 space-y-0.5">
               {(
                 [
-                  {
-                    id: 'chat',
-                    label: 'Team Chat & Channels',
-                    icon: MessageSquare,
-                    color: 'text-[#2563EB]',
-                  },
                   { id: 'gmail', label: 'Gmail', icon: Mail, color: 'text-[#EA4335]' },
                   {
                     id: 'server_mail',
                     label: 'Server Mail (Domain)',
                     icon: Server,
                     color: 'text-[#0B57D0]',
+                  },
+                ] as const
+              ).map((app) => {
+                const Icon = app.icon;
+                const isSelected = activeModule === app.id;
+                return (
+                  <button
+                    key={app.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveModule(app.id);
+                      if (app.id === 'gmail') setActiveFolderId('inbox');
+                      if (app.id === 'server_mail') setActiveServerFolder('inbox');
+                      if (isMobile) setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3.5 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap ${
+                      isMobile ? 'min-h-[44px] py-2.5' : 'py-2'
+                    } ${
+                      isSelected
+                        ? 'bg-[#D3E3FD] dark:bg-blue-950/80 text-[#041E49] dark:text-blue-200 font-bold shadow-2xs'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 font-medium'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${app.color}`} />
+                    <span>{app.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 3: MORE TOOLS (Collapsible - 15 Secondary Tools as shown in visual layout) */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsMoreToolsExpanded((prev) => !prev)}
+            className={`w-full flex items-center justify-between px-3 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 rounded-xl ${
+              isMobile ? 'min-h-[44px] py-2.5 active:bg-slate-200/60 dark:active:bg-slate-800/60' : 'py-1.5'
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
+              {isMoreToolsExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <Layers className="w-3.5 h-3.5 text-slate-400" />
+              <span>More Tools</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700">
+              15
+            </span>
+          </button>
+
+          {isMoreToolsExpanded && (
+            <div className="mt-1 space-y-0.5">
+              {(
+                [
+                  {
+                    id: 'cmh_forms',
+                    label: 'Form Builder',
+                    icon: Blocks,
+                    color: 'text-[#0B57D0]',
+                  },
+                  {
+                    id: 'docs',
+                    label: 'Docs',
+                    icon: FileText,
+                    color: 'text-[#2684FC]',
+                  },
+                  {
+                    id: 'forms',
+                    label: 'Forms',
+                    icon: ClipboardList,
+                    color: 'text-[#673AB7]',
+                  },
+                  {
+                    id: 'chat',
+                    label: 'Team Chat & Channels',
+                    icon: MessageSquare,
+                    color: 'text-[#2563EB]',
                   },
                   {
                     id: 'bulk',
@@ -834,8 +1034,9 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setActiveModule(app.id);
-                      if (app.id === 'gmail') setActiveFolderId('inbox');
-                      if (app.id === 'server_mail') setActiveServerFolder('inbox');
+                      if (app.id === 'cmh_forms') setCmhFormsSubTab('all_forms');
+                      if (app.id === 'docs') setDocsSubTab('all_docs');
+                      if (app.id === 'forms') setFormsSubTab('all_forms');
                       if (app.id === 'files') setFilesSubTab('all_files');
                       if (app.id === 'slides') setSlidesSubTab('all_slides');
                       if (app.id === 'sheets') setSheetsSubTab('all_sheets');
@@ -1017,19 +1218,21 @@ export default function App() {
   if (publicFormIdFromUrl || previewPublicFormId) {
     const activeFormId = previewPublicFormId || publicFormIdFromUrl!;
     return (
-      <PublicFormView
-        formId={activeFormId}
-        onExitPreview={
-          previewPublicFormId
-            ? () => setPreviewPublicFormId(null)
-            : () => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('form');
-                window.history.replaceState({}, '', url.toString());
-                setPublicFormIdFromUrl(null);
-              }
-        }
-      />
+      <Suspense fallback={<ModuleLoadingFallback />}>
+        <PublicFormView
+          formId={activeFormId}
+          onExitPreview={
+            previewPublicFormId
+              ? () => setPreviewPublicFormId(null)
+              : () => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('form');
+                  window.history.replaceState({}, '', url.toString());
+                  setPublicFormIdFromUrl(null);
+                }
+          }
+        />
+      </Suspense>
     );
   }
 
@@ -1037,19 +1240,21 @@ export default function App() {
   if (publicInviteIdFromUrl || previewMemberInviteId) {
     const activeInviteId = previewMemberInviteId || publicInviteIdFromUrl!;
     return (
-      <PublicMemberInviteView
-        inviteId={activeInviteId}
-        onExitPreview={
-          previewMemberInviteId
-            ? () => setPreviewMemberInviteId(null)
-            : () => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('invite');
-                window.history.replaceState({}, '', url.toString());
-                setPublicInviteIdFromUrl(null);
-              }
-        }
-      />
+      <Suspense fallback={<ModuleLoadingFallback />}>
+        <PublicMemberInviteView
+          inviteId={activeInviteId}
+          onExitPreview={
+            previewMemberInviteId
+              ? () => setPreviewMemberInviteId(null)
+              : () => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('invite');
+                  window.history.replaceState({}, '', url.toString());
+                  setPublicInviteIdFromUrl(null);
+                }
+          }
+        />
+      </Suspense>
     );
   }
 
@@ -1057,19 +1262,21 @@ export default function App() {
   if (publicCmhFromUrl || previewCmhParam) {
     const activeCmhParam = previewCmhParam || publicCmhFromUrl!;
     return (
-      <PublicCmhPortalView
-        cmhParam={activeCmhParam}
-        onExitPreview={
-          previewCmhParam
-            ? () => setPreviewCmhParam(null)
-            : () => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('cmh');
-                window.history.replaceState({}, '', url.toString());
-                setPublicCmhFromUrl(null);
-              }
-        }
-      />
+      <Suspense fallback={<ModuleLoadingFallback />}>
+        <PublicCmhPortalView
+          cmhParam={activeCmhParam}
+          onExitPreview={
+            previewCmhParam
+              ? () => setPreviewCmhParam(null)
+              : () => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('cmh');
+                  window.history.replaceState({}, '', url.toString());
+                  setPublicCmhFromUrl(null);
+                }
+          }
+        />
+      </Suspense>
     );
   }
 
@@ -1084,30 +1291,34 @@ export default function App() {
   // Public Landing Dashboard (clean simple dashboard + optional sign-in / invite modal; zero admin setup)
   if (appInviteTokenFromUrl || !wsUser || !wsCapabilities) {
     return (
-      <SimpleDashboardView
-        inviteToken={appInviteTokenFromUrl}
-        onAuthenticated={(authedUser, caps) => {
-          setWsUser(authedUser);
-          setWsCapabilities(caps);
-          setAppInviteTokenFromUrl(null);
-          setActiveModule('overview');
-        }}
-      />
+      <Suspense fallback={<ModuleLoadingFallback />}>
+        <SimpleDashboardView
+          inviteToken={appInviteTokenFromUrl}
+          onAuthenticated={(authedUser, caps) => {
+            setWsUser(authedUser);
+            setWsCapabilities(caps);
+            setAppInviteTokenFromUrl(null);
+            setActiveModule('overview');
+          }}
+        />
+      </Suspense>
     );
   }
 
   // Completely Distinct Mobile-App-Style Member Dashboard UI (Cloud / Mint / Lavender Themes)
   if (wsUser.role === 'MEMBER' || wsCapabilities.isMember) {
     return (
-      <MemberPortalShell
-        user={wsUser}
-        capabilities={wsCapabilities}
-        onLogout={handleWorkspaceLogout}
-        onUserUpdated={(updatedUser, updatedCaps) => {
-          setWsUser(updatedUser);
-          if (updatedCaps) setWsCapabilities(updatedCaps);
-        }}
-      />
+      <Suspense fallback={<ModuleLoadingFallback />}>
+        <MemberPortalShell
+          user={wsUser}
+          capabilities={wsCapabilities}
+          onLogout={handleWorkspaceLogout}
+          onUserUpdated={(updatedUser, updatedCaps) => {
+            setWsUser(updatedUser);
+            if (updatedCaps) setWsCapabilities(updatedCaps);
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -1475,6 +1686,12 @@ export default function App() {
               <div className="ws-animate-in absolute right-0 mt-2 w-80 max-h-[80vh] overflow-y-auto rounded-2xl bg-[#F8FAFD] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3 grid grid-cols-3 gap-2 z-50">
                 {(
                   [
+                    {
+                      id: 'main_feed',
+                      label: 'Main',
+                      icon: LayoutGrid,
+                      color: 'text-[#0B57D0]',
+                    },
                     {
                       id: 'overview',
                       label: 'Overview',
@@ -1967,7 +2184,19 @@ export default function App() {
 
         {/* Active Module Viewport */}
         <main className="flex-1 min-w-0 min-h-0 pb-14 md:pb-3 md:pr-3 overflow-hidden flex flex-col">
-          {activeModule === 'overview' && (
+          <Suspense fallback={<ModuleLoadingFallback />}>
+            {activeModule === 'main_feed' && (
+              <WorkspaceFeedView onOpen={(source, id) => {
+                setFeedSource({ type: source, id });
+                if (source === 'members') {
+                  setViewingProfileMemberId(id);
+                  setActiveModule('profile');
+                } else {
+                  setActiveModule((feedModuleMap[source] || source) as WorkspaceModule);
+                }
+              }} />
+            )}
+            {activeModule === 'overview' && (
             <OverviewDashboardView
               workspaceTitle={workspaceTitle}
               gmailCount={gmailAccounts.length}
@@ -2111,6 +2340,8 @@ export default function App() {
           )}
           {activeModule === 'docs' && (
             <DocsView
+              initialItemId={feedSource?.type === 'docs' ? feedSource.id : undefined}
+              onInitialItemOpened={() => setFeedSource(null)}
               isAuthenticated={isAuthenticated}
               onRequireAuth={() => handleGoogleSignIn(false)}
               activeSubTab={docsSubTab}
@@ -2143,6 +2374,8 @@ export default function App() {
           )}
           {activeModule === 'cmh_tasks' && (
             <CmhTasksView
+              initialItemId={feedSource?.type === 'cmh_tasks' ? feedSource.id : undefined}
+              onInitialItemOpened={() => setFeedSource(null)}
               activeSubTab={cmhTasksSubTab}
               onSubTabChange={setCmhTasksSubTab}
               searchQuery={searchQuery}
@@ -2155,6 +2388,8 @@ export default function App() {
           )}
           {activeModule === 'cmh_projects' && (
             <CmhProjectsView
+              initialItemId={feedSource?.type === 'cmh_projects' ? feedSource.id : undefined}
+              onInitialItemOpened={() => setFeedSource(null)}
               activeSubTab={cmhProjectsSubTab}
               onSubTabChange={setCmhProjectsSubTab}
               searchQuery={searchQuery}
@@ -2226,6 +2461,7 @@ export default function App() {
             <SettingsView
               activeSubTab={settingsSubTab}
               onSelectSubTab={setSettingsSubTab}
+              onOpenAccessSettings={() => setActiveModule('admin_panel')}
               gmailAccounts={gmailAccounts}
               activeGmailEmail={activeGmail}
               onGmailAccountsChanged={(updated, nextEmail) => {
@@ -2266,6 +2502,7 @@ export default function App() {
               }}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
@@ -2409,16 +2646,18 @@ export default function App() {
       )}
 
       {/* Persistent Floating Sticky Messenger Launcher (Desktop & Mobile) */}
-      <FloatingMessengerWidget
-        currentUserId={wsUser.id}
-        currentUserRole={wsUser.role}
-        onNavigateToCommunication={() => {
-          setActiveModule('communication');
-          setIsDesktopDrawerOpen(false);
-          setIsMobileDrawerOpen(false);
-        }}
-        isCurrentViewCommunication={activeModule === 'communication'}
-      />
+      <Suspense fallback={null}>
+        <FloatingMessengerWidget
+          currentUserId={wsUser.id}
+          currentUserRole={wsUser.role}
+          onNavigateToCommunication={() => {
+            setActiveModule('communication');
+            setIsDesktopDrawerOpen(false);
+            setIsMobileDrawerOpen(false);
+          }}
+          isCurrentViewCommunication={activeModule === 'communication'}
+        />
+      </Suspense>
     </div>
   );
 }

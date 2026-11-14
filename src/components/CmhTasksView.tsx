@@ -39,6 +39,8 @@ import { CmhFormFieldsEditorModal } from './CmhFormFieldsEditorModal';
 export type CmhTasksSubTab = 'all_tasks' | 'create_task';
 
 interface CmhTasksViewProps {
+  initialItemId?: string;
+  onInitialItemOpened?: () => void;
   activeSubTab?: CmhTasksSubTab;
   onSubTabChange?: (tab: CmhTasksSubTab) => void;
   searchQuery?: string;
@@ -57,6 +59,8 @@ const PRIORITY_STYLES: Record<
 };
 
 export const CmhTasksView: React.FC<CmhTasksViewProps> = ({
+  initialItemId,
+  onInitialItemOpened,
   activeSubTab = 'all_tasks',
   onSubTabChange,
   searchQuery = '',
@@ -103,6 +107,15 @@ export const CmhTasksView: React.FC<CmhTasksViewProps> = ({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [isFieldsEditorOpen, setIsFieldsEditorOpen] = useState(false);
 
+
+  useEffect(() => {
+    if (!initialItemId) return;
+    const item = tasks.find((entry) => entry.id === initialItemId);
+    if (!item) return;
+    setInspectingTask(item);
+    setSelectedSubmission(item.submissions?.[0] || null);
+    onInitialItemOpened?.();
+  }, [initialItemId, tasks, onInitialItemOpened]);
   useEffect(() => {
     setSubTab(activeSubTab);
   }, [activeSubTab]);

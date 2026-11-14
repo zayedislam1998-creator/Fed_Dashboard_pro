@@ -70,6 +70,8 @@ export interface ServerMailAccount {
   passwordHashPreview: string;
   createdAt: string;
   lastVerifiedAt?: string;
+  role?: string;
+  isSystemPrimary?: boolean;
 }
 
 export interface ServerMailVerifyResult {
@@ -887,8 +889,45 @@ export interface PostgresConfigClient {
   passwordHashPreview?: string;
   ssl: boolean;
   autoMigrateOnStartup: boolean;
+  dbFileSizeBytes?: number;
+  serverVersion?: string;
   lastMigratedAt?: string;
   statusMessage?: string;
+}
+
+export interface PostgresCatalogTable {
+  tableName: string;
+  rowCount: number;
+  dataSize: string;
+  indexSize: string;
+  totalSize: string;
+  totalBytes: number;
+  dataBytes: number;
+  indexBytes: number;
+}
+
+export interface PostgresCatalogInfo {
+  connected: boolean;
+  configured: boolean;
+  serverVersion: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  ssl: boolean;
+  maskedUrl: string;
+  dbSizeBytes: number;
+  dbSizePretty: string;
+  tableCount: number;
+  totalLiveRows: number;
+  activeConnections: number;
+  poolStatus: string;
+  authStatus: string;
+  userCount: number;
+  sessionCount: number;
+  envSaved: boolean;
+  syncedAt: string;
+  tables: PostgresCatalogTable[];
 }
 
 export async function fetchNotifications(): Promise<WorkspaceNotification[]> {
@@ -2376,13 +2415,17 @@ export async function submitPublicCmhResponse(
     submitterEmail: string;
     values: Record<string, any>;
     statusUpdate?: string;
-  }
+  },
+  requestId?: string
 ): Promise<{ ok: boolean; confirmationMessage: string; submission: CmhSubmission }> {
   const res = await fetch(
     `/api/cmh/public/${encodeURIComponent(targetType)}/${encodeURIComponent(id)}/submit`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(requestId ? { 'Idempotency-Key': requestId } : {}),
+      },
       body: JSON.stringify({ ...payload, originUrl: window.location.origin }),
     }
   );
@@ -2506,6 +2549,15 @@ export async function deleteExternalIntegration(id: string): Promise<ExternalInt
     throw new Error(data.error || 'Failed to remove integration.');
   }
   return data.integrations || [];
+}
+
+export async function fetchPostgresCatalog(): Promise<PostgresCatalogInfo> {
+  const res = await fetch('/api/db/catalog');
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to fetch PostgreSQL catalog.');
+  }
+  return data;
 }
 
 export async function fetchDatabaseConfig(): Promise<{
@@ -3378,10 +3430,16 @@ export async function getOrCreateDirectConversation(
 }
 
 export async function fetchCommunicationMessages(
-  conversationId: string
+  conversationId: string,
+  cursor?: string,
+  limit?: number
 ): Promise<CommunicationMessageItem[]> {
   try {
-    const res = await fetchWithRetry(`/api/communication/conversations/${encodeURIComponent(conversationId)}/messages`);
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetchWithRetry(`/api/communication/conversations/${encodeURIComponent(conversationId)}/messages${qs}`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.messages || [];
@@ -3439,9 +3497,16 @@ export async function uploadCommunicationFile(file: File | Blob, filename?: stri
   return data.attachment;
 }
 
-export async function fetchCommunicationMembersList(): Promise<CommunicationMemberItem[]> {
+export async function fetchCommunicationMembersList(
+  query?: string,
+  limit?: number
+): Promise<CommunicationMemberItem[]> {
   try {
-    const res = await fetchWithRetry('/api/communication/members');
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetchWithRetry(`/api/communication/members${qs}`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.members || [];

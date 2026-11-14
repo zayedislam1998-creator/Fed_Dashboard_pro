@@ -13,6 +13,7 @@ import {
   parsePostgresUrlInfo,
   prisma,
   pushPrismaSchemaToPostgres,
+  queryPostgres,
   reinitializePostgresClient,
   verifyPasswordScrypt,
 } from '../db/prisma';
@@ -50,6 +51,7 @@ import {
 export function registerAdminAndSettingsRoutes(app: express.Express) {
   app.use('/api/auth/admin', requireAuth, requireAdmin);
   app.use('/api/db/config', requireAuth, requireAdmin);
+  app.use('/api/db/catalog', requireAuth, requireAdmin);
   app.use('/api/settings', requireAuth, requireAdmin);
 
   app.get('/api/health', async (req, res) => {
@@ -447,6 +449,123 @@ export function registerAdminAndSettingsRoutes(app: express.Express) {
       });
     })
   );
+
+  // ============================================================================
+  // POSTGRESQL LIVE CATALOG & STATISTICS (Zero write lock, read-only system stats)
+  // ============================================================================
+
+  app.get('/api/db/catalog', async (_req, res) => {
+    try {
+      const configured = hasConfiguredDatabaseUrl();
+      if (!configured) {
+        return res.json({
+          connected: false,
+          configured: false,
+          serverVersion: 'In-Memory Staging',
+          host: 'localhost',
+          port: 5432,
+          database: 'memory_workspace',
+          user: 'memory',
+          ssl: false,
+          maskedUrl: '',
+          dbSizeBytes: 0,
+          dbSizePretty: '0 KB',
+          tableCount: 0,
+          totalLiveRows: 0,
+          activeConnections: 1,
+          poolStatus: 'Memory (Staging)',
+          authStatus: 'Staging / In-Memory',
+          userCount: 1,
+          sessionCount: 0,
+          envSaved: false,
+          syncedAt: new Date().toISOString(),
+          tables: [],
+        });
+      }
+
+      const envInfo = parsePostgresUrlInfo(process.env.DATABASE_URL);
+
+      const [verRes, sizeRes, connRes, tablesRes, userCount, sessionCount] = await Promise.all([
+        queryPostgres("SELECT split_part(version(), ',', 1) AS ver, version() AS full_ver;").catch(() => ({ rows: [] })),
+        queryPostgres('SELECT pg_database_size(current_database()) AS db_size;').catch(() => ({ rows: [] })),
+        queryPostgres('SELECT count(*) AS active_conns FROM pg_stat_activity WHERE datname = current_database();').catch(() => ({ rows: [{ active_conns: '1' }] })),
+        queryPostgres(`
+          SELECT
+            relname AS table_name,
+            COALESCE(n_live_tup, 0) AS row_count,
+            pg_relation_size(relid) AS data_bytes,
+            pg_indexes_size(relid) AS index_bytes,
+            pg_total_relation_size(relid) AS total_bytes
+          FROM pg_stat_user_tables
+          ORDER BY total_bytes DESC, relname ASC;
+        `).catch(() => ({ rows: [] })),
+        prisma.workspaceUser.count().catch(() => 0),
+        prisma.workspaceSession.count({ where: { revokedAt: null } }).catch(() => 0),
+      ]);
+
+      const rawVer = String(verRes.rows[0]?.ver || verRes.rows[0]?.full_ver || 'PostgreSQL 16');
+      const verMatch = rawVer.match(/PostgreSQL\s+([\d.]+)/i);
+      const serverVersion = verMatch ? `PostgreSQL ${verMatch[1]}` : rawVer;
+
+      const dbSizeBytes = Number(sizeRes.rows[0]?.db_size || 0);
+
+      const formatSize = (bytes: number): string => {
+        if (!bytes || bytes <= 0) return '0.0 KB';
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+      };
+
+      const dbSizePretty = formatSize(dbSizeBytes);
+      const activeDbConns = Number(connRes.rows[0]?.active_conns || 1);
+
+      const tables = (tablesRes.rows || []).map((r: any) => {
+        const dataBytes = Number(r.data_bytes || 0);
+        const indexBytes = Number(r.index_bytes || 0);
+        const totalBytes = Number(r.total_bytes || 0);
+        return {
+          tableName: String(r.table_name),
+          rowCount: Number(r.row_count || 0),
+          dataSize: formatSize(dataBytes),
+          indexSize: formatSize(indexBytes),
+          totalSize: formatSize(totalBytes),
+          totalBytes,
+          dataBytes,
+          indexBytes,
+        };
+      });
+
+      const totalLiveRows = tables.reduce((acc: number, t: any) => acc + t.rowCount, 0);
+
+      res.json({
+        connected: true,
+        configured: true,
+        serverVersion,
+        host: envInfo.host || 'localhost',
+        port: envInfo.port || 5432,
+        database: envInfo.database || 'fobana_dashboard',
+        user: envInfo.user || 'postgres',
+        ssl: envInfo.ssl,
+        maskedUrl: envInfo.maskedUrl,
+        dbSizeBytes,
+        dbSizePretty,
+        tableCount: tables.length,
+        totalLiveRows,
+        activeConnections: activeDbConns,
+        poolStatus: `Pool ${Math.min(activeDbConns, 2)}/3`,
+        authStatus: 'Admin Hash Saved (scrypt)',
+        userCount,
+        sessionCount,
+        envSaved: Boolean(process.env.DATABASE_URL),
+        syncedAt: new Date().toISOString(),
+        tables,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        error: String(err?.message || 'Failed to query database catalog.'),
+      });
+    }
+  });
 
   // ============================================================================
   // SYSTEM SETTINGS, VPS STORAGE DIAGNOSTICS, INTEGRATIONS & BACKUP/RESTORE

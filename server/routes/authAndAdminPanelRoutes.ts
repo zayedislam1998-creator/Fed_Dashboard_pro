@@ -1,3 +1,4 @@
+import { queueWorkspaceMail } from '../mail/workspaceMailAutomation';
 import crypto from 'crypto';
 import express from 'express';
 import nodemailer from 'nodemailer';
@@ -137,80 +138,100 @@ export async function buildScopedMemberPreview(userId: string) {
         },
       });
 
-  const [
-    taskAssignments,
-    allTasks,
-    allProjects,
-    posts,
-    docs,
-    forms,
-    slides,
-    files,
-    folders,
-    shares,
-    channelMemberships,
-    channels,
-    members,
-    teamGroups,
-  ] = await Promise.all([
-    prisma.taskAssignment.findMany({ where: { userId: targetUser.id } }),
-    prisma.cmhTask.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.cmhProject.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspacePostNotice.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceDoc.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceForm.findMany({
-      include: { submissions: { orderBy: { timestampMs: 'desc' } } },
-      orderBy: { timestampMs: 'desc' },
-    }),
-    prisma.workspaceSlide.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceFile.findMany({ where: { deletedAt: null }, orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceFolder.findMany({ orderBy: { timestampMs: 'asc' } }),
-    prisma.resourceShare.findMany({ where: { targetUserId: targetUser.id } }),
-    prisma.channelMembership.findMany({ where: { userId: targetUser.id } }),
-    prisma.workspaceChatChannel.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceMember.findMany({ orderBy: { timestampMs: 'desc' } }),
-    prisma.workspaceTeamGroup.findMany({ orderBy: { timestampMs: 'asc' } }),
-  ]);
+  const canTasks = caps.allowedModules.includes('cmh_tasks');
+  const canProjects = caps.allowedModules.includes('cmh_projects');
+  const canPosts = caps.allowedModules.includes('posts');
+  const canDocs = caps.allowedModules.includes('docs');
+  const canForms = caps.allowedModules.includes('forms');
+  const canSlides = caps.allowedModules.includes('slides');
+  const canFiles = caps.allowedModules.includes('files');
+  const canChat = caps.allowedModules.includes('chat');
+  const canTeams = caps.allowedModules.includes('teams');
 
-  const assignedTaskIdSet = new Set(taskAssignments.map((a) => a.taskId));
+  const [taskAssignments, shares, channelMemberships] = await Promise.all([
+    canTasks ? prisma.taskAssignment.findMany({ where: { userId: targetUser.id } }) : Promise.resolve([]),
+    canDocs || canForms || canSlides || canFiles
+      ? prisma.resourceShare.findMany({ where: { targetUserId: targetUser.id } })
+      : Promise.resolve([]),
+    canChat ? prisma.channelMembership.findMany({ where: { userId: targetUser.id } }) : Promise.resolve([]),
+  ]);
+  const ownedByMember = { ownerUserId: targetUser.id };
+  const assignmentFilters = [
+    ...(linkedMember ? [{ assignedMemberIdsJson: { array_contains: [linkedMember.id] } }] : []),
+    ...(linkedMember?.teamId ? [{ assignedTeamIdsJson: { array_contains: [linkedMember.teamId] } }] : []),
+  ];
+  const sharedIds = (resourceType: string) =>
+    shares.filter((share) => share.resourceType === resourceType).map((share) => share.resourceId);
+  const ownedOrShared = (resourceType: string) => ({
+    OR: [ownedByMember, { id: { in: sharedIds(resourceType) } }],
+  });
+  const taskProjectIds = caps.projectGrants
+    .filter((grant) => grant.actions.includes('project.manage_tasks'))
+    .map((grant) => grant.projectId);
+
+  const [allTasks, allProjects, posts, docs, forms, slides, files, folders, channels, members, teamGroups] =
+    await Promise.all([
+      canTasks ? prisma.cmhTask.findMany({
+        where: { OR: [
+          ownedByMember,
+          { id: { in: taskAssignments.map((assignment) => assignment.taskId) } },
+          { projectId: { in: taskProjectIds } },
+          ...assignmentFilters,
+        ] },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canProjects ? prisma.cmhProject.findMany({
+        where: { OR: [
+          ownedByMember,
+          { id: { in: caps.projectGrants.map((grant) => grant.projectId) } },
+          ...assignmentFilters,
+        ] },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canPosts ? prisma.workspacePostNotice.findMany({
+        where: { OR: [ownedByMember, { status: 'PUBLISHED' }] },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canDocs ? prisma.workspaceDoc.findMany({
+        where: ownedOrShared('DOC'),
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canForms ? prisma.workspaceForm.findMany({
+        where: ownedOrShared('FORM'),
+        include: { submissions: { orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }] } },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canSlides ? prisma.workspaceSlide.findMany({
+        where: ownedOrShared('SLIDE'),
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canFiles ? prisma.workspaceFile.findMany({
+        where: {
+          deletedAt: null,
+          OR: [...ownedOrShared('FILE').OR, { visibility: 'WORKSPACE' }],
+        },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canFiles ? prisma.workspaceFolder.findMany({ orderBy: { timestampMs: 'asc' } }) : Promise.resolve([]),
+      canChat ? prisma.workspaceChatChannel.findMany({
+        where: {
+          isWorkspaceWide: false,
+          OR: [ownedByMember, { id: { in: channelMemberships.map((membership) => membership.channelId) } }],
+        },
+        orderBy: [{ timestampMs: 'desc' }, { id: 'desc' }],
+      }) : Promise.resolve([]),
+      canTeams ? prisma.workspaceMember.findMany({ orderBy: { timestampMs: 'desc' } }) : Promise.resolve([]),
+      canTeams ? prisma.workspaceTeamGroup.findMany({ orderBy: { timestampMs: 'asc' } }) : Promise.resolve([]),
+    ]);
+
   const grantMap = new Map(caps.projectGrants.map((g) => [g.projectId, g]));
-  const shareKeySet = new Set(shares.map((s) => `${s.resourceType}:${s.resourceId}`));
-  const memberChannelIdSet = new Set(channelMemberships.map((c) => c.channelId));
 
   const scopedTasks = caps.allowedModules.includes('cmh_tasks')
-    ? allTasks
-        .filter((t) => {
-          if (t.ownerUserId === targetUser.id || assignedTaskIdSet.has(t.id)) return true;
-          if (linkedMember) {
-            const mIds = Array.isArray(t.assignedMemberIdsJson) ? (t.assignedMemberIdsJson as string[]) : [];
-            const tIds = Array.isArray(t.assignedTeamIdsJson) ? (t.assignedTeamIdsJson as string[]) : [];
-            if (mIds.includes(linkedMember.id) || (linkedMember.teamId && tIds.includes(linkedMember.teamId))) {
-              return true;
-            }
-          }
-          if (t.projectId && grantMap.has(t.projectId)) {
-            const g = grantMap.get(t.projectId)!;
-            if (g.actions.includes('project.manage_tasks')) return true;
-          }
-          return false;
-        })
-        .map(toCmhTaskDto)
+    ? allTasks.map(toCmhTaskDto)
     : [];
 
   const scopedProjects = caps.allowedModules.includes('cmh_projects')
-    ? allProjects
-        .filter((p) => {
-          if (p.ownerUserId === targetUser.id || grantMap.has(p.id)) return true;
-          if (linkedMember) {
-            const mIds = Array.isArray(p.assignedMemberIdsJson) ? (p.assignedMemberIdsJson as string[]) : [];
-            const tIds = Array.isArray(p.assignedTeamIdsJson) ? (p.assignedTeamIdsJson as string[]) : [];
-            if (mIds.includes(linkedMember.id) || (linkedMember.teamId && tIds.includes(linkedMember.teamId))) {
-              return true;
-            }
-          }
-          return false;
-        })
-        .map((p) => {
+    ? allProjects.map((p) => {
           const dto = toCmhProjectDto(p);
           const grant = grantMap.get(p.id);
           const canSeeBudget = caps.isAdmin || Boolean(grant?.actions.includes('project.edit_details'));
@@ -224,9 +245,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedPosts = caps.allowedModules.includes('posts')
-    ? posts
-        .filter((p) => p.status === 'PUBLISHED' || p.ownerUserId === targetUser.id)
-        .map((p) => ({
+    ? posts.map((p) => ({
           id: p.id,
           type: p.type,
           title: p.title,
@@ -249,9 +268,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedDocs = caps.allowedModules.includes('docs')
-    ? docs
-        .filter((d) => d.ownerUserId === targetUser.id || shareKeySet.has(`DOC:${d.id}`))
-        .map((d) => ({
+    ? docs.map((d) => ({
           id: d.id,
           title: d.title,
           category: d.category,
@@ -266,9 +283,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedForms = caps.allowedModules.includes('forms')
-    ? forms
-        .filter((f) => f.ownerUserId === targetUser.id || shareKeySet.has(`FORM:${f.id}`))
-        .map((f) => ({
+    ? forms.map((f) => ({
           id: f.id,
           title: f.title,
           description: f.description || '',
@@ -291,9 +306,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedSlides = caps.allowedModules.includes('slides')
-    ? slides
-        .filter((s) => s.ownerUserId === targetUser.id || shareKeySet.has(`SLIDE:${s.id}`))
-        .map((s) => ({
+    ? slides.map((s) => ({
           id: s.id,
           title: s.title,
           subtitle: s.subtitle || '',
@@ -311,14 +324,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedFiles = caps.allowedModules.includes('files')
-    ? files
-        .filter(
-          (f) =>
-            f.ownerUserId === targetUser.id ||
-            shareKeySet.has(`FILE:${f.id}`) ||
-            f.visibility === 'WORKSPACE'
-        )
-        .map((f) => ({
+    ? files.map((f) => ({
           id: f.id,
           folderId: f.folderId,
           folderName: f.folderName,
@@ -336,13 +342,7 @@ export async function buildScopedMemberPreview(userId: string) {
     : [];
 
   const scopedChannels = caps.allowedModules.includes('chat')
-    ? channels
-        .filter(
-          (c) =>
-            !c.isWorkspaceWide &&
-            (memberChannelIdSet.has(c.id) || c.ownerUserId === targetUser.id)
-        )
-        .map((c) => ({
+    ? channels.map((c) => ({
           id: c.id,
           name: c.name,
           description: c.description || '',
@@ -1585,6 +1585,7 @@ export function registerAuthAndAdminPanelRoutes(app: express.Express) {
 
       await prisma.$transaction(async (tx) => {
         if (Array.isArray(grants)) {
+          const previous = new Set((await tx.projectPermissionGrant.findMany({ where: { userId: targetId }, select: { projectId: true } })).map((row) => row.projectId));
           await tx.projectPermissionGrant.deleteMany({ where: { userId: targetId } });
           for (const g of grants) {
             if (!g?.projectId) continue;
@@ -1601,10 +1602,16 @@ export function registerAuthAndAdminPanelRoutes(app: express.Express) {
                 updatedAt: nowStr,
               },
             });
+            if (target.isActive && !previous.has(String(g.projectId))) {
+              const item = await tx.cmhProject.findUnique({ where: { id: String(g.projectId) }, select: { id: true, title: true } });
+              if (item) await queueWorkspaceMail('admin-assignment:' + item.id, [target.email], 'Assigned to you: ' + item.title,
+                'Sign in to Workspace Pro to open the assigned item.', tx);
+            }
           }
         }
 
         if (Array.isArray(assignedTaskIds)) {
+          const previous = new Set((await tx.taskAssignment.findMany({ where: { userId: targetId }, select: { taskId: true } })).map((row) => row.taskId));
           await tx.taskAssignment.deleteMany({ where: { userId: targetId } });
           for (const tId of assignedTaskIds) {
             if (!tId) continue;
@@ -1617,6 +1624,11 @@ export function registerAuthAndAdminPanelRoutes(app: express.Express) {
                 createdAt: nowStr,
               },
             });
+            if (target.isActive && !previous.has(String(tId))) {
+              const item = await tx.cmhTask.findUnique({ where: { id: String(tId) }, select: { id: true, title: true } });
+              if (item) await queueWorkspaceMail('admin-assignment:' + item.id, [target.email], 'Assigned to you: ' + item.title,
+                'Sign in to Workspace Pro to open the assigned item.', tx);
+            }
           }
         }
 

@@ -43,6 +43,8 @@ export type DocsSubTab = 'all_docs' | 'add_doc';
 interface DocsViewProps {
   isAuthenticated: boolean;
   onRequireAuth: () => void;
+  initialItemId?: string;
+  onInitialItemOpened?: () => void;
   activeSubTab?: DocsSubTab;
   onSelectSubTab?: (tab: DocsSubTab) => void;
 }
@@ -50,6 +52,8 @@ interface DocsViewProps {
 export const DocsView: React.FC<DocsViewProps> = ({
   isAuthenticated: _isAuthenticated,
   onRequireAuth: _onRequireAuth,
+  initialItemId,
+  onInitialItemOpened,
   activeSubTab = 'all_docs',
   onSelectSubTab,
 }) => {
@@ -131,6 +135,14 @@ export const DocsView: React.FC<DocsViewProps> = ({
     );
     switchTab('add_doc');
   };
+  useEffect(() => {
+    if (!initialItemId) return;
+    const item = docs.find((entry) => entry.id === initialItemId);
+    if (!item) return;
+    handleOpenDocForEdit(item);
+    onInitialItemOpened?.();
+  }, [initialItemId, docs, onInitialItemOpened]);
+
 
   const handleSaveDoc = async () => {
     setIsSaving(true);

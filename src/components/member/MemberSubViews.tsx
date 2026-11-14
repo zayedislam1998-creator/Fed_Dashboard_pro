@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { useSubmissionRequest } from '../../services/useSubmissionRequest';
 import {
   Briefcase,
   CheckCircle2,
@@ -173,6 +174,7 @@ export const MODULE_APP_CATALOG: Array<{
   section: 'workspace' | 'tools';
   icon: React.ComponentType<{ className?: string }>;
 }> = [
+  { id: 'main_feed', label: 'Main', shortLabel: 'Main', description: 'Workspace activity and assigned work', section: 'workspace', icon: LayoutDashboard },
   { id: 'overview', label: 'Overview', shortLabel: 'Overview', description: 'Personal summary & analytics', section: 'workspace', icon: LayoutDashboard },
   { id: 'profile', label: 'Profile & Website Studio', shortLabel: 'Studio', description: 'Resume Builder & Corporate Website', section: 'workspace', icon: UserIcon },
   { id: 'communication', label: 'Communication', shortLabel: 'Messenger', description: 'Direct 1-on-1 Messenger & Files', section: 'workspace', icon: MessagesSquare },
@@ -594,6 +596,7 @@ export function MemberTasksView({
   const [note, setNote] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
+  const submissionRequest = useSubmissionRequest();
   const canSubmit = !readOnlyPreview && canMemberAction(data.capabilities, 'task.submit_own');
   const visibleTasks = useMemo(() => {
     const byStatus =
@@ -606,7 +609,9 @@ export function MemberTasksView({
     if (!canSubmit) return;
     setSaving(true);
     try {
-      await submitMemberTaskProgress(taskId, { statusUpdate, note });
+      const payload = { statusUpdate, note };
+      await submitMemberTaskProgress(taskId, payload, submissionRequest.getId([taskId, payload]));
+      submissionRequest.clear();
       setNote('');
       setEditingTaskId(null);
       await onReload();

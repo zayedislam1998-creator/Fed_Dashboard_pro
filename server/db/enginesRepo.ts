@@ -659,7 +659,7 @@ export async function saveEngineRecordInDb(
           id,
           channelId: String(payload.channelId || ''),
           senderName: String(payload.senderName || 'Administrator'),
-          senderEmail: String(payload.senderEmail || 'zayed.islam1998@gmail.com'),
+          senderEmail: String(payload.senderEmail || process.env.ADMIN_USERNAME || 'admin@workspace.local'),
           text: String(payload.text || ''),
           isPinned: Boolean(payload.isPinned),
           createdAt: String(payload.createdAt || nowStr),

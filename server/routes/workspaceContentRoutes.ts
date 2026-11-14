@@ -1,3 +1,4 @@
+import { normalizeMailAddress, queueAdminSubmission, queueWorkspaceMail } from '../mail/workspaceMailAutomation';
 import express from 'express';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
@@ -483,6 +484,7 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
           },
         });
 
+        await queueAdminSubmission('form', subRow.id, form.title, tx);
         return { status: 200 as const, form, submission: toFormSubmissionDto(subRow) };
       });
 
@@ -880,7 +882,6 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
   app.get(
     '/api/teams/members',
     asyncHandler(async (_req, res) => {
-      await syncWorkspaceUsersToMembers();
       const [members, groups] = await Promise.all([
         prisma.workspaceMember.findMany({ orderBy: { timestampMs: 'desc' } }),
         prisma.workspaceTeamGroup.findMany({ orderBy: { timestampMs: 'asc' } }),
@@ -1389,6 +1390,28 @@ export function registerWorkspaceContentRoutes(app: express.Express) {
         item: toWorkspacePostNoticeDto(saved),
         postsNotices: all.map(toWorkspacePostNoticeDto),
       });
+    })
+  );
+
+  app.post(
+    '/api/posts-notices/:id/email',
+    asyncHandler(async (req, res) => {
+      const post = await prisma.workspacePostNotice.findUnique({ where: { id: req.params.id } });
+      if (!post || post.type !== 'NOTICE' || post.status !== 'PUBLISHED') {
+        res.status(404).json({ error: 'Published notice not found.' }); return;
+      }
+      const ids = Array.isArray(req.body?.memberIds) ? [...new Set<string>(req.body.memberIds.filter((id: unknown) => typeof id === 'string'))] : [];
+      if (!ids.length || ids.length > 200) {
+        res.status(400).json({ error: 'Select between 1 and 200 members.' }); return;
+      }
+      const members = await prisma.workspaceMember.findMany({ where: { id: { in: ids } }, select: { email: true } });
+      const recipients = members.map((member) => normalizeMailAddress(member.email)).filter(Boolean);
+      if (!recipients.length) {
+        res.status(400).json({ error: 'Selected members have no valid email addresses.' }); return;
+      }
+      const queued = await queueWorkspaceMail('notice:' + post.id, recipients,
+        'Notice: ' + post.title, 'A notice has been shared with you. Sign in to Workspace Pro to read it.');
+      res.status(202).json({ queued });
     })
   );
 

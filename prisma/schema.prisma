@@ -189,7 +189,7 @@ model WorkspaceSystemSetting {
   id                         String  @id @default("default")
   workspaceName              String  @default("Workspace Pro") @map("workspace_name")
   organizationName           String  @default("") @map("organization_name")
-  adminEmail                 String  @default("zayed.islam1998@gmail.com") @map("admin_email")
+  adminEmail                 String  @default("") @map("admin_email")
   timezone                   String  @default("Asia/Dhaka")
   dateFormat                 String  @default("MMM DD, YYYY") @map("date_format")
   defaultLandingModule       String  @default("gmail") @map("default_landing_module")
@@ -231,6 +231,8 @@ model ServerMailAccount {
   encryptedPassword String   @map("encrypted_password")
   createdAt         String   @map("created_at")
   lastVerifiedAt    String?  @map("last_verified_at")
+  role              String   @default("general")
+  isSystemPrimary   Boolean  @default(false) @map("is_system_primary")
   extraFields       Json     @default("{}") @map("extra_fields")
 
   @@map("server_mail_accounts")
@@ -255,6 +257,8 @@ model GmailAccount {
   encryptedPassword String   @map("encrypted_password")
   createdAt         String   @map("created_at")
   lastVerifiedAt    String?  @map("last_verified_at")
+  role              String   @default("general")
+  isSystemPrimary   Boolean  @default(false) @map("is_system_primary")
   extraFields       Json     @default("{}") @map("extra_fields")
 
   @@map("gmail_accounts")
@@ -648,7 +652,7 @@ model CmhProject {
 
 model CmhNotificationRule {
   id                      String  @id
-  adminEmail              String  @default("zayed.islam1998@gmail.com") @map("admin_email")
+  adminEmail              String  @default("") @map("admin_email")
   notifyOnFormSubmit      Boolean @default(true) @map("notify_on_form_submit")
   notifyOnTaskActivity    Boolean @default(true) @map("notify_on_task_activity")
   notifyOnProjectActivity Boolean @default(true) @map("notify_on_project_activity")
@@ -974,3 +978,69 @@ model WorkspaceCorporateWebsite {
   @@map("workspace_corporate_websites")
 }
 
+
+
+model WorkspaceFeedItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  sourceType  String   @map("source_type")
+  sourceId    String   @map("source_id")
+  title       String
+  ownerUserId String?  @map("owner_user_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lifecycle   String   @default("ACTIVE")
+  dueDate     String?  @map("due_date")
+  removedAt   DateTime? @map("removed_at") @db.Timestamptz(6)
+
+  @@unique([sourceType, sourceId])
+  @@index([createdAt, id])
+  @@map("workspace_feed_items")
+}
+
+model WorkspaceFeedProgress {
+  itemId    String    @map("item_id")
+  userId    String    @map("user_id")
+  seenAt    DateTime? @map("seen_at") @db.Timestamptz(6)
+  status    String    @default("PENDING")
+  progress  Int       @default(0)
+  reason    String?
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([itemId, userId])
+  @@map("workspace_feed_progress")
+}
+
+model WorkspaceFeedPreference {
+  id         String @id
+  defaultTab String @map("default_tab")
+
+  @@map("workspace_feed_preferences")
+}
+
+
+model WorkspaceMailAutomation {
+  id                 String  @id
+  accountId          String? @map("account_id")
+  senderType         String  @default("server_mail") @map("sender_type")
+  fallbackAccountId  String? @map("fallback_account_id")
+  fallbackSenderType String? @map("fallback_sender_type")
+
+  @@map("workspace_mail_automation")
+}
+
+model WorkspaceMailDelivery {
+  id          String   @id
+  recipient   String
+  subject     String
+  body        String
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  priority    String   @default("NORMAL")
+  eventType   String?  @map("event_type")
+  nextAt      DateTime @default(now()) @map("next_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  sentAt      DateTime? @map("sent_at")
+  lastError   String?  @map("last_error")
+
+  @@index([status, nextAt])
+  @@map("workspace_mail_deliveries")
+}

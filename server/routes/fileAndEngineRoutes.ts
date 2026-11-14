@@ -36,7 +36,7 @@ import { deleteWorkspaceFileAssets } from '../services/storageService';
 const uploadStorage = multer.memoryStorage();
 const uploadMiddleware = multer({
   storage: uploadStorage,
-  limits: { fileSize: 55 * 1024 * 1024, files: 20 },
+  limits: { fileSize: 55 * 1024 * 1024, files: 10 },
 });
 
 function formatNowLabel(): string {

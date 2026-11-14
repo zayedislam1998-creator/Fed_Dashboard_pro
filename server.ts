@@ -1,4 +1,5 @@
 import './server/env';
+import { registerWorkspaceMailAutomation, startWorkspaceMailWorker } from './server/mail/workspaceMailAutomation';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -27,11 +28,34 @@ import { registerMemberPortalRoutes } from './server/routes/memberPortalRoutes';
 import { registerWorkspaceContentRoutes } from './server/routes/workspaceContentRoutes';
 import { registerCmhAndEngineRoutes } from './server/routes/cmhAndEngineRoutes';
 import { registerFileAndEngineRoutes } from './server/routes/fileAndEngineRoutes';
+import { registerWorkspaceFeedRoutes } from './server/routes/workspaceFeedRoutes';
 import { registerCommunicationRoutes } from './server/routes/communicationRoutes';
 
 const app = express();
 app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT) || 3000;
+
+app.get('/api/live', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ ok: true });
+});
+
+if (process.env.NODE_ENV === 'production') {
+  // Immutable caching for hashed Vite production build assets (/assets/*)
+  app.use(
+    '/assets',
+    express.static(path.join(process.cwd(), 'dist', 'assets'), {
+      fallthrough: false,
+      immutable: true,
+      maxAge: '1y',
+      etag: true,
+      lastModified: true,
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      },
+    })
+  );
+}
 
 app.use(express.json({ limit: '55mb' }));
 app.use(attachAuthContext);
@@ -208,13 +232,15 @@ registerWorkspaceContentRoutes(app);
 registerFileAndEngineRoutes(app);
 registerCmhAndEngineRoutes(app);
 registerCommunicationRoutes(app);
+registerWorkspaceFeedRoutes(app);
+registerWorkspaceMailAutomation(app);
 
 async function startServer() {
   if (hasConfiguredDatabaseUrl()) {
     const health = await checkPostgresHealth();
     if (health.connected && health.schemaReady) {
       try {
-        await ensureWorkspaceBootstrap();
+        await ensureWorkspaceBootstrap(true, true);
         await syncWorkspaceUsersToMembers();
         console.log(
           `PostgreSQL connected via pg.Pool + Prisma (${health.host}:${health.port}/${health.database}, ${health.tableCount} tables).`
@@ -227,7 +253,7 @@ async function startServer() {
     }
   } else {
     try {
-      await ensureWorkspaceBootstrap();
+      await ensureWorkspaceBootstrap(true, true);
       await syncWorkspaceUsersToMembers();
       console.log(
         'Staging memory mode active — login and dashboard ready. Connect PostgreSQL DATABASE_URL anytime in Settings -> PostgreSQL & Backup.'
@@ -247,18 +273,24 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
+    // General static files (favicon, manifest, robots, etc.)
     app.use(
       express.static(distPath, {
-        etag: false,
-        lastModified: false,
-        setHeaders: (res) => {
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-          res.setHeader('Pragma', 'no-cache');
+        etag: true,
+        lastModified: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+          }
         },
       })
     );
+
+    // SPA fallback: index.html must be revalidated so new deployments load immediately
     app.get('*', (_req, res) => {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -268,8 +300,10 @@ async function startServer() {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
 
+  const stopWorkspaceMail = startWorkspaceMailWorker();
   const gracefulShutdown = async () => {
     httpServer.close();
+    await stopWorkspaceMail();
     await Promise.all([
       prisma.$disconnect().catch(() => {}),
       closePostgresPool().catch(() => {}),
