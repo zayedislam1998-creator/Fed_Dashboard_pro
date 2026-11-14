@@ -26,4 +26,8 @@ Thumbs.db
 *.bak
 *.zip
 
+# Junie session artifacts, plans, and knowledge base
+.junie/
+Knowledge/
+
 
