@@ -19,6 +19,7 @@ storage/
 # Temporary audit output and editor/OS files
 .audit-tmp/
 .vscode/
+.idea/
 Thumbs.db
 *.tsbuildinfo
 .backup*/
