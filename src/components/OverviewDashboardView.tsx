@@ -32,6 +32,7 @@ import {
   CmhSubmission,
   WorkspaceMemberItem,
 } from '../services/workspaceApi';
+import { StateDistributionCard } from '../features/maps';
 
 interface OverviewDashboardViewProps {
   workspaceTitle?: string;
@@ -1225,6 +1226,9 @@ export const OverviewDashboardView: React.FC<OverviewDashboardViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Geographic Footprint: 50-State Interactive US Member Distribution Map */}
+              <StateDistributionCard className="mt-6" />
             </div>
           </div>
         </div>

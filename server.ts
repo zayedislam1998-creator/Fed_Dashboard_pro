@@ -30,6 +30,7 @@ import { registerCmhAndEngineRoutes } from './server/routes/cmhAndEngineRoutes';
 import { registerFileAndEngineRoutes } from './server/routes/fileAndEngineRoutes';
 import { registerWorkspaceFeedRoutes } from './server/routes/workspaceFeedRoutes';
 import { registerCommunicationRoutes } from './server/routes/communicationRoutes';
+import { registerAnalyticsRoutes } from './server/routes/analyticsRoutes';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -233,6 +234,7 @@ registerFileAndEngineRoutes(app);
 registerCmhAndEngineRoutes(app);
 registerCommunicationRoutes(app);
 registerWorkspaceFeedRoutes(app);
+registerAnalyticsRoutes(app);
 registerWorkspaceMailAutomation(app);
 
 async function startServer() {

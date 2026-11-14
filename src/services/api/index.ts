@@ -8,3 +8,4 @@ export * from './contentApi';
 export * from './cmhApi';
 export * from './workspaceEnginesApi';
 export * from './communicationApi';
+export * from './analyticsApi';

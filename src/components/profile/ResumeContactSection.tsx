@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { ResumeProfileData } from '../../services/workspaceApi';
+import { ProfileLocationMap } from '../../features/maps';
 
 interface ResumeContactSectionProps {
   contact: ResumeProfileData['contact'];
@@ -290,6 +291,15 @@ export const ResumeContactSection: React.FC<ResumeContactSectionProps> = ({
               </a>
             </div>
           )}
+
+          {/* Embedded Profile Geographic Anchor Map */}
+          <ProfileLocationMap
+            stateCode={contact.state}
+            stateName={contact.state}
+            countryName={contact.country}
+            cityName={contact.city}
+            className="mt-3"
+          />
         </div>
       )}
     </section>
