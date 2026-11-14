@@ -346,6 +346,7 @@ model WorkspaceDoc {
   timestampMs  BigInt  @map("timestamp_ms")
   extraFields  Json    @default("{}") @map("extra_fields")
 
+  @@index([ownerUserId, timestampMs])
   @@map("workspace_docs")
 }
 
@@ -367,6 +368,7 @@ model WorkspaceSlide {
   timestampMs  BigInt  @map("timestamp_ms")
   extraFields  Json    @default("{}") @map("extra_fields")
 
+  @@index([ownerUserId, timestampMs])
   @@map("workspace_slides")
 }
 
@@ -388,6 +390,7 @@ model WorkspaceForm {
   extraFields         Json             @default("{}") @map("extra_fields")
   submissions         FormSubmission[]
 
+  @@index([ownerUserId, timestampMs])
   @@map("workspace_forms")
 }
 
@@ -454,6 +457,9 @@ model WorkspaceMember {
   timestampMs  BigInt  @map("timestamp_ms")
   extraFields  Json    @default("{}") @map("extra_fields")
 
+  @@index([teamId])
+  @@index([email])
+  @@index([status])
   @@map("workspace_members")
 }
 
@@ -491,6 +497,7 @@ model WorkspacePostNotice {
   timestampMs     BigInt  @map("timestamp_ms")
   extraFields     Json    @default("{}") @map("extra_fields")
 
+  @@index([status, isPinned, timestampMs])
   @@map("workspace_posts_notices")
 }
 
@@ -573,6 +580,7 @@ model SystemNotification {
   extraFields Json    @default("{}") @map("extra_fields")
 
   @@index([timestampMs])
+  @@index([isRead, timestampMs])
   @@map("system_notifications")
 }
 
@@ -622,6 +630,9 @@ model CmhTask {
   extraFields           Json             @default("{}") @map("extra_fields")
   assignments           TaskAssignment[]
 
+  @@index([status, priority])
+  @@index([projectId, timestampMs])
+  @@index([ownerUserId])
   @@map("cmh_tasks")
 }
 
@@ -647,6 +658,8 @@ model CmhProject {
   extraFields           Json                     @default("{}") @map("extra_fields")
   permissionGrants      ProjectPermissionGrant[]
 
+  @@index([status, priority])
+  @@index([ownerUserId])
   @@map("cmh_projects")
 }
 
@@ -697,6 +710,7 @@ model WorkspaceCalendarEvent {
   timestampMs BigInt  @map("timestamp_ms")
   extraFields Json    @default("{}") @map("extra_fields")
 
+  @@index([date, timestampMs])
   @@map("workspace_calendar_events")
 }
 
@@ -721,6 +735,7 @@ model WorkspaceInvoice {
   timestampMs   BigInt  @map("timestamp_ms")
   extraFields   Json    @default("{}") @map("extra_fields")
 
+  @@index([status, dueDate])
   @@map("workspace_invoices")
 }
 
@@ -739,6 +754,7 @@ model WorkspaceExpense {
   timestampMs  BigInt  @map("timestamp_ms")
   extraFields  Json    @default("{}") @map("extra_fields")
 
+  @@index([category, date])
   @@map("workspace_expenses")
 }
 
